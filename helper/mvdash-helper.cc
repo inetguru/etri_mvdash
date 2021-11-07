@@ -114,6 +114,19 @@ mvdashClientHelper::SetAttribute (std::string name, const AttributeValue &value)
 }
 
 ApplicationContainer
+mvdashClientHelper::Install (NodeContainer c) const
+{
+  ApplicationContainer apps;
+  int j=0;
+  for (NodeContainer::Iterator i = c.Begin (); i != c.End (); ++i, ++j)
+    {
+      apps.Add (InstallPriv (*i, j));
+    }
+
+  return apps;
+}
+
+ApplicationContainer
 mvdashClientHelper::Install (NodeContainer c, std::string algo) const
 {
   ApplicationContainer apps;
@@ -131,7 +144,9 @@ mvdashClientHelper::InstallPriv (Ptr<Node> node, uint16_t clientId) const
 {
   Ptr<Application> app = m_factory.Create<mvdashClient> ();
   app->GetObject<mvdashClient> ()->SetAttribute ("ClientId", UintegerValue (clientId));
-  //app->GetObject<mvdashClient> ()->Initialise (algo, clientId);
+//  app->GetObject<mvdashClient> ()->Initialise (algo, clientId);
+  app->GetObject<mvdashClient> ()->Initialize();
+
   node->AddApplication (app);
   return app;
 }

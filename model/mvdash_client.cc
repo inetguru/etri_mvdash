@@ -21,6 +21,7 @@
 #include "ns3/simulator.h"
 #include "ns3/socket-factory.h"
 #include "free_viewpoint_model.h"
+#include "markovian_viewpoint_model.h"
 #include "maximize_current_adaptation.h"
 #include <numeric>
 
@@ -36,6 +37,11 @@ TypeId mvdashClient::GetTypeId (void)
     .SetParent<Application> ()
     .SetGroupName("Applications")
     .AddConstructor<mvdashClient> ()
+    .AddAttribute ("SimId",
+                   "The ID of the current simulation, for logging purposes",
+                   UintegerValue (0),
+                   MakeUintegerAccessor (&mvdashClient::m_simId),
+                   MakeUintegerChecker<uint32_t> ())
     .AddAttribute ("ServerAddress",
                    "The Address of the DASH server",
                    AddressValue (),
@@ -46,6 +52,26 @@ TypeId mvdashClient::GetTypeId (void)
                    UintegerValue (0),
                    MakeUintegerAccessor (&mvdashClient::m_clientId),
                    MakeUintegerChecker<uint32_t> ())
+    .AddAttribute ("VPInfo",
+                   "The relative path to the file containing viewpoint switching info",
+                   StringValue ("./contrib/etri_mvdash/viewpoint_transition.csv"),
+                   MakeStringAccessor (&mvdashClient::m_vpInfoFilePath),
+                   MakeStringChecker ())
+    .AddAttribute ("VPModel",
+                   "The View-point Switching Model",
+                   StringValue ("markovian"),
+                   MakeStringAccessor (&mvdashClient::m_vpModelName),
+                   MakeStringChecker ())  
+    .AddAttribute ("MVInfo",
+                   "The relative path to the file containing the Multi-View Video Source Info",
+                   StringValue ("./contrib/etri_mvdash/multiviewvideo.csv"),
+                   MakeStringAccessor (&mvdashClient::m_mvInfoFilePath),
+                   MakeStringChecker ())
+    .AddAttribute ("MVAlgo",
+                   "The Multi-View Video Streaming Adaptation Algorithm",
+                   StringValue ("maximize_current"),
+                   MakeStringAccessor (&mvdashClient::m_mvAlgoName),
+                   MakeStringChecker ())  
     .AddTraceSource ("ControllerTrace", "Tracing Controller related events",
                      MakeTraceSourceAccessor (&mvdashClient::m_ctrlTrace),
                      "ns3::mvdashClient::ControllerEventCallback")
@@ -178,7 +204,7 @@ void mvdashClient::StartApplication ()    // Called at time specified by Start
 {
   NS_LOG_FUNCTION (this);
   // Create the socket if not already
-  Initialize(); 
+  //Initialize(); 
   if (!m_socket)
     {
         TypeId tid = TypeId::LookupByName ("ns3::TcpSocketFactory");
@@ -457,12 +483,40 @@ bool mvdashClient::StartPlayback (void)
 void mvdashClient::Initialize(void) 
 {
   NS_LOG_FUNCTION (this);
-  ReadInBitrateValues("./contrib/etri_mvdash/multiviewvideo.csv");
-  m_pViewModel = new Free_Viewpoint_Model();
-  m_pViewModel->m_nViews = m_nViewpoints;
-  m_pViewModel->UpdateViewpoint(m_tIndexPlay);
 
-  m_pAlgorithm = new maximizeCurrentAdaptation(m_videoData, m_playData, m_bufferData, m_downData);
+  //ReadInBitrateValues("./contrib/etri_mvdash/multiviewvideo.csv");
+  ReadInBitrateValues(m_mvInfoFilePath);
+
+// ===========================================================================================
+  // Initialze View-Point Switching Model
+  if (m_vpModelName == "markovian") {
+    m_pViewModel = new Markovian_Viewpoint_Model(m_vpInfoFilePath);
+    m_pViewModel->UpdateViewpoint(m_tIndexPlay);
+  }
+  else if (m_vpModelName == "free") {
+    m_pViewModel = new Free_Viewpoint_Model();
+    m_pViewModel->m_nViews = m_nViewpoints;
+    m_pViewModel->UpdateViewpoint(m_tIndexPlay);
+  }
+  else {
+    NS_LOG_ERROR ("Invalid view point switching Model name entered. Terminating");
+    StopApplication();
+    Simulator::Stop();
+  }
+
+// ===========================================================================================
+  // Initialze Multi-View Adaptation Algorithm
+  if (m_mvAlgoName == "maximize_current") {
+    m_pAlgorithm = new maximizeCurrentAdaptation(m_videoData, m_playData, m_bufferData, m_downData);
+  }
+  else if (m_mvAlgoName == "newone") {
+    m_pAlgorithm = new maximizeCurrentAdaptation(m_videoData, m_playData, m_bufferData, m_downData);
+  }
+  else {
+    NS_LOG_ERROR ("Invalid Adaptation Algorithm name entered. Terminating");
+    StopApplication();
+    Simulator::Stop();
+  }
 }
 
 int mvdashClient::ReadInBitrateValues (std::string segmentSizeFile)
@@ -528,9 +582,11 @@ void mvdashClient::LogDownload(void) {
     NS_LOG_FUNCTION (this);
     
     int vp, nReq = m_downData.id.size()-1;
+    std::string downloadLogFileName = "./contrib/etri_mvdash/downlog_sim" + std::to_string(m_simId)
+       +"_cl" + std::to_string(m_clientId) +".csv";
     std::ofstream downloadLog;
-
-    downloadLog.open("./contrib/etri_mvdash/downlog.csv");
+    //downloadLog.open("./contrib/etri_mvdash/downlog.csv");
+    downloadLog.open(downloadLogFileName.c_str());
 
     // CSV Columns
     // id, tIndex, tSent, tDownStart, tDownEnd, q_v0, q_v1, ...
@@ -560,9 +616,12 @@ void mvdashClient::LogDownload(void) {
 void mvdashClient::LogPlayback(void) {
     NS_LOG_FUNCTION (this);
     int vp, nPlay = m_playData.playbackIndex.size()-1;
-    std::ofstream playbackLog;
+    std::string playbackLogFileName = "./contrib/etri_mvdash/playback_sim" + std::to_string(m_simId) 
+        +"_cl" + std::to_string(m_clientId) +".csv";
 
-    playbackLog.open("./contrib/etri_mvdash/playback.csv");
+    std::ofstream playbackLog;
+    //playbackLog.open("./contrib/etri_mvdash/playback.csv");
+    playbackLog.open(playbackLogFileName.c_str());
 
     // CSV Columns
     // tIndex, playStart, q_v0, q_v1, ...
@@ -587,9 +646,12 @@ void mvdashClient::LogPlayback(void) {
 void mvdashClient::LogBuffer(void) {
     NS_LOG_FUNCTION (this);
     int nBuffer = m_bufferData.timeNow.size()-1;
-    std::ofstream bufferLog;
+    std::string bufferLogFileName ="./contrib/etri_mvdash/buffer_sim" + std::to_string(m_simId)
+       +"_cl" + std::to_string(m_clientId) +".csv";    
 
-    bufferLog.open("./contrib/etri_mvdash/buffer.csv");
+    std::ofstream bufferLog;
+    //bufferLog.open("./contrib/etri_mvdash/buffer.csv");
+    bufferLog.open(bufferLogFileName.c_str());
 
     // CSV Columns
     // now, bufferOld, bufferNew

@@ -153,8 +153,19 @@ public:
   void SetAttribute (std::string name, const AttributeValue &value);
 
   /**
-   * \param clients the nodes with the name of the adaptation algorithm to be used
+   * \param c the nodes to be installedd
    *
+   * Create one tcp stream client application on each of the input nodes and
+   * instantiate an adaptation algorithm on each of the tcp stream client according
+   * to the factory set string.
+   *
+   * \returns the applications created, one application per input node.
+   */
+  ApplicationContainer Install (NodeContainer c) const;
+
+  /**
+   * \param clients the nodes with the name of the adaptation algorithm to be used
+   * \param algo an adpatation algorithm to be applied
    * Create one tcp stream client application on each of the input nodes and
    * instantiate an adaptation algorithm on each of the tcp stream client according
    * to the given string.

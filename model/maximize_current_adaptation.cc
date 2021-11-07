@@ -25,7 +25,7 @@ NS_LOG_COMPONENT_DEFINE ("maximizeCurrentAdaptation");
 
 NS_OBJECT_ENSURE_REGISTERED (maximizeCurrentAdaptation);
 
-#define MY_NS_LOG_INFO
+//#define MY_NS_LOG_INFO
 
 maximizeCurrentAdaptation::maximizeCurrentAdaptation (const t_videoDataGroup &videoData,
                         const struct playbackDataGroup & playData,

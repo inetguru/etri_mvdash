@@ -61,6 +61,9 @@ public:
   static TypeId GetTypeId (void);
   mvdashClient ();
   virtual ~mvdashClient ();
+  void Initialize (void);
+
+  uint32_t   m_simId;
   uint32_t   m_clientId;
 
   /**
@@ -120,7 +123,6 @@ private:
    *
    */
 
-  void Initialize (void);
   int ReadInBitrateValues (std::string segmentSizeFile);
 
   void LogPlayback(void);
@@ -132,6 +134,11 @@ private:
   Ptr<Socket>   m_socket;           //!< Socket
   bool          m_connected;        //!< True if connected
   Address       m_serverAddress;    //!< Server address
+
+  std::string   m_vpInfoFilePath;
+  std::string   m_vpModelName;
+  std::string   m_mvInfoFilePath;
+  std::string   m_mvAlgoName;
 
   controllerState m_state;
 

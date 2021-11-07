@@ -14,6 +14,7 @@ def build(bld):
         'model/mvdash_server.cc',
         'model/multiview-model.cc',
         'model/free_viewpoint_model.cc',
+        'model/markovian_viewpoint_model.cc',
         'model/mvdash_adaptation_algorithm.cc',
         'model/maximize_current_adaptation.cc',
         'helper/mvdash-helper.cc',
@@ -26,8 +27,9 @@ def build(bld):
     # Tests encapsulating example programs should be listed here
     if (bld.env['ENABLE_EXAMPLES']):
         module_test.source.extend([
-        'example/etri_mvdash-example.cc',
-        'example/mvdash-v1.cc'
+#        'example/etri_mvdash-example.cc',
+        'example/mvdash-v1.cc',
+        'example/viewpoint_test.cc'
              ])
 
     headers = bld(features='ns3header')
@@ -38,6 +40,7 @@ def build(bld):
         'model/mvdash_server.h',
         'model/multiview-model.h',
         'model/free_viewpoint_model.h',
+        'model/markovian_viewpoint_model.h',
         'model/mvdash_adaptation_algorithm.h',
         'model/maximize_current_adaptation.h',        
         'helper/mvdash-helper.h',

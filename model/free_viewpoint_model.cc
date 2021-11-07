@@ -33,7 +33,7 @@ Free_Viewpoint_Model::Free_Viewpoint_Model()
     m_avgDwellTime = {10,5,5,5,5,8,8,5,5};*/
 
     m_nViews = 5;
-    m_minDwellTime = 1;
+    m_minDwellTime = 2;
 
     m_cumulativeProb = {0.4, 0.6, 0.80, 0.90, 1.0};
 //    m_avgDwellTime = {10,5,5,8,8};
@@ -58,7 +58,7 @@ int32_t Free_Viewpoint_Model::InitViewpoint() {
     int32_t  viewpoint = 0;
 
 //    m_remDwellTime = m_minDwellTime + ceil(m_pExpRNG->GetValue(m_avgDwellTime.at(viewpoint), 30));
-      m_remDwellTime = 3;
+      m_remDwellTime = 2*m_minDwellTime;
 //    NS_LOG_INFO("InitViewpoint - Dwell Time : " << m_remDwellTime);
     return viewpoint;
 }
