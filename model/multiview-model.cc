@@ -16,7 +16,7 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
- #include "multiview-model.h"
+#include "multiview-model.h"
 
 namespace ns3 {
 
@@ -24,22 +24,26 @@ NS_LOG_COMPONENT_DEFINE ("MultiView_Model");
 
 NS_OBJECT_ENSURE_REGISTERED (MultiView_Model);
 
-int32_t MultiView_Model::UpdateViewpoint(const int64_t t_index)
+int32_t
+MultiView_Model::UpdateViewpoint (const int64_t t_index)
 {
-    int32_t viewpoint;
-    
-    if (t_index == 0) { 
-        viewpoint = InitViewpoint();
-        m_nViewpointSelected.assign(m_nViews, 0);
-    }
-    else 
-        viewpoint = GetNextViewpoint(t_index);
+  int32_t viewpoint;
 
-    m_viewpointData.viewpointIndex.push_back(viewpoint);
-    m_viewpointData.viewpointTime.push_back(Simulator::Now ().GetMicroSeconds ());
-    m_nViewpointSelected.at(viewpoint) += 1;
-        
-    return viewpoint;
+  if (t_index == 0)
+    {
+      viewpoint = InitViewpoint ();
+      m_nViewpointSelected.assign (m_nViews, 0);
+    }
+  else
+    {
+      viewpoint = GetNextViewpoint (t_index);
+    }
+
+  m_viewpointData.viewpointIndex.push_back (viewpoint);
+  m_viewpointData.viewpointTime.push_back (Simulator::Now ().GetMicroSeconds ());
+  m_nViewpointSelected.at (viewpoint) += 1;
+
+  return viewpoint;
 }
 
 } // namespace ns3

@@ -105,6 +105,8 @@ int main(int argc, char *argv[]) {
     LogComponentEnable("mvdashClient", log_precision);
     LogComponentEnable("mvdashServer", log_precision);
     LogComponentEnable("maximizeCurrentAdaptation", log_precision);
+    LogComponentEnable("adaptationFlush", log_precision);
+    LogComponentEnable("MultiView_Model", log_precision);
 
     uint32_t useHttp3=0;      // 0 - HTTP2/TCP, 1 - HTTP3/QUIC    
     uint32_t nBufSize = 600000;

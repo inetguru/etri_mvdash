@@ -36,6 +36,8 @@ public:
   MultiView_Model () {};
   int32_t UpdateViewpoint(const int64_t t_index);
   int32_t CurrentViewpoint() { return m_viewpointData.viewpointIndex.back();}
+  int32_t PrevViewpoint() { return m_viewpointData.viewpointIndex[ m_viewpointData.viewpointIndex.size()-2];} //DION_TEST
+  std::vector <int32_t> getVPindex() {return m_viewpointData.viewpointIndex;}
   double ViewpointRatio(int viewpoint) 
     { return (double)m_nViewpointSelected.at(viewpoint)/m_viewpointData.viewpointIndex.size();}
   int32_t m_nViews;

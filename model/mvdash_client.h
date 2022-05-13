@@ -37,25 +37,23 @@ class Packet;
 /**
   * \brief This enum is used to define the states of the state machine which controls the behaviour of the client.
   */
-enum controllerState
-{
-  initial, downloading, downloadingPlaying, playing, terminal
-};
+enum controllerState { initial, downloading, downloadingPlaying, playing, terminal };
 
 /**
   * \brief This enum is used to define the controller events of the state machine which controls the behaviour of the client.
   */
-enum controllerEvent
-{
-  downloadFinished, playbackFinished, irdFinished, init
+enum controllerEvent { downloadFinished, playbackFinished, irdFinished, init };
+
+enum controllerTraceEvent {
+  cteSendRequest,
+  cteDownloaded,
+  cteAllDownloaded,
+  cteStartPlayback,
+  cteEndPlayback,
+  cteBufferUnderrun
 };
 
-enum controllerTraceEvent
-{
-  cteSendRequest, cteDownloaded, cteAllDownloaded, cteStartPlayback, cteEndPlayback, cteBufferUnderrun  
-};
-
-class mvdashClient : public Application 
+class mvdashClient : public Application
 {
 public:
   static TypeId GetTypeId (void);
@@ -63,8 +61,8 @@ public:
   virtual ~mvdashClient ();
   void Initialize (void);
 
-  uint32_t   m_simId;
-  uint32_t   m_clientId;
+  uint32_t m_simId;
+  uint32_t m_clientId;
 
   /**
    * Callback signature for `RequestTrace` trace source.
@@ -72,29 +70,38 @@ public:
    *                   the trace originated.
    * \param ev request event id.
    */
-  typedef void (*RequestEventCallback)(Ptr<const mvdashClient> client, requestEvent ev, int32_t tid);
+  typedef void (*RequestEventCallback) (Ptr<const mvdashClient> client, requestEvent ev,
+                                        int32_t tid);
   /**
    * Callback signature for `SegmentTrace` trace source.
    * \param client Pointer to this instance of mvdashClient, which is where
    *                   the trace originated.
    * \param ev request event id.
    */
-  typedef void (*SegmentEventCallback)(Ptr<const mvdashClient> client, segmentEvent ev, st_mvdashRequest sinfo);  
+  typedef void (*SegmentEventCallback) (Ptr<const mvdashClient> client, segmentEvent ev,
+                                        st_mvdashRequest sinfo);
   /**
    * Callback signature for `ControllerTrace` trace source.
    * \param client Pointer to this instance of mvdashClient, which is where
    *                   the trace originated.
    * \param ev request event id.
    */
-  typedef void (*ControllerEventCallback)(Ptr<const mvdashClient> client, controllerState state, controllerTraceEvent ev, int32_t tid);  
+  typedef void (*ControllerEventCallback) (Ptr<const mvdashClient> client, controllerState state,
+                                           controllerTraceEvent ev, int32_t tid);
 
 protected:
   virtual void DoDispose (void);
 
 private:
+  bool Req_buffering = false;
+  bool Req_Type = false; // hybrid true, group false
+  bool Req_pending = false; //DION Test
+  int Req_m_tIndexReqSent = -1; //DION Test
+  int32_t Req_m_tIndexDownloaded;
+
   // inherited from Application base class.
-  virtual void StartApplication (void);    // Called at time specified by Start
-  virtual void StopApplication (void);     // Called at time specified by Stop
+  virtual void StartApplication (void); // Called at time specified by Start
+  virtual void StopApplication (void); // Called at time specified by Stop
 
   /**
    * \brief Handle a packet received by the application
@@ -112,9 +119,27 @@ private:
    */
   void ConnectionFailed (Ptr<Socket> socket);
 
-  int SendRequest(struct st_mvdashRequest *pMsg, int nReq);
+  struct st_mvdashRequest *PrepareRequest (int tIndexDownload);
+  int SendRequest (struct st_mvdashRequest *pMsg, int nReq);
+  
+  /**
+ * @brief 
+  * In the Request -> Response system, the most important part is m_downData.time
+  * Because single request is redownload the previous segment, we only consider the segment index
+  * and to update the quality of the downloaded segment
+ * @param pMsg Mvdash request
+ * @return int 
+ */
+  int Hybrid_SendRequest (struct st_mvdashRequest *pMsg); //DION Test
 
-  struct st_mvdashRequest * PrepareRequest(int tIndexDownload);
+  /**
+ * @brief create mvdash request for single messasge
+ * 
+ * @param tIndexReq Segment index
+ * @return struct st_mvdashRequest* 
+ */
+  struct st_mvdashRequest *Hybrid_PrepareRequest (int tIndexDownload); //DION Test
+
   bool StartPlayback (void);
 
   void Controller (controllerEvent event);
@@ -125,33 +150,34 @@ private:
 
   int ReadInBitrateValues (std::string segmentSizeFile);
 
-  void LogPlayback(void);
-  void LogDownload(void);
-  void LogBuffer(void);
+  void LogPlayback (void);
+  void LogDownload (void);
+  void LogBuffer (void);
 
-  void SelectRateIndexes(int tIndexReq, std::vector <int32_t> *pIndexes);
+  void SelectRateIndexes (int tIndexReq, std::vector<int32_t> *pIndexes);
 
-  Ptr<Socket>   m_socket;           //!< Socket
-  bool          m_connected;        //!< True if connected
-  Address       m_serverAddress;    //!< Server address
+  Ptr<Socket> m_socket; //!< Socket
+  bool m_connected; //!< True if connected
+  Address m_serverAddress; //!< Server address
 
-  std::string   m_vpInfoFilePath;
-  std::string   m_vpModelName;
-  std::string   m_mvInfoFilePath;
-  std::string   m_mvAlgoName;
+  std::string m_vpInfoFilePath;
+  std::string m_vpModelName;
+  std::string m_mvInfoFilePath;
+  std::string m_mvAlgoName;
+  std::string m_reqType;
 
   controllerState m_state;
 
-  int32_t       m_tIndexLast;
-  int32_t       m_tIndexPlay;
-  int32_t       m_tIndexReqSent;
-  int32_t       m_tIndexDownloaded;  
-  int32_t       m_bytesReceived;
-  int32_t       m_sendRequestCounter;
-  int32_t       m_recvRequestCounter;
-  bool          m_segStarted;
+  int32_t m_tIndexLast;
+  int32_t m_tIndexPlay;
+  int32_t m_tIndexReqSent;
+  int32_t m_tIndexDownloaded;
+  int32_t m_bytesReceived;
+  int32_t m_sendRequestCounter;
+  int32_t m_recvRequestCounter;
+  bool m_segStarted;
 
-  int32_t       m_nViewpoints;
+  int32_t m_nViewpoints;
 
   MultiView_Model *m_pViewModel;
   mvdashAdaptationAlgorithm *m_pAlgorithm;
@@ -159,16 +185,18 @@ private:
   //std::vector <videoData> m_videoData;
   t_videoDataGroup m_videoData;
   struct downloadDataGroup m_downData;
+  struct downloadedSegment m_downSegment; //TEST --> Playback (merging group & single request)
   struct playbackDataGroup m_playData;
   struct bufferData m_bufferData;
 
-  std::vector <int64_t> m_timeReqSent;
-  std::queue <st_mvdashRequest> m_requests;
+  std::vector<int64_t> m_timeReqSent;
+  std::queue<st_mvdashRequest> m_requests;
 
   //std::vector <st_mvdashRequest> m_requests;
 
   /// Traced Callback: The "RequestMessage" trace source
-  TracedCallback<Ptr<const mvdashClient>, controllerState, controllerTraceEvent, int32_t> m_ctrlTrace;
+  TracedCallback<Ptr<const mvdashClient>, controllerState, controllerTraceEvent, int32_t>
+      m_ctrlTrace;
 
   /// Traced Callback: The "RequestMessage" trace source
   TracedCallback<Ptr<const mvdashClient>, requestEvent, int32_t> m_reqTrace;

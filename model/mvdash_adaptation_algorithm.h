@@ -32,7 +32,7 @@ public:
                         const struct bufferData & bufferData,
                         const struct downloadDataGroup & downData  );
 
-  virtual int64_t SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint, std::vector <int32_t> *pIndexes) = 0;
+  virtual int64_t SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint, std::vector <int32_t> *pIndexes,  int32_t group) = 0; //TEST
 
 protected:
   const t_videoDataGroup & m_videoData;

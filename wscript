@@ -17,6 +17,7 @@ def build(bld):
         'model/markovian_viewpoint_model.cc',
         'model/mvdash_adaptation_algorithm.cc',
         'model/maximize_current_adaptation.cc',
+        'model/adaptation_test.cc', #TEST
         'helper/mvdash-helper.cc',
         ]
 
@@ -42,7 +43,8 @@ def build(bld):
         'model/free_viewpoint_model.h',
         'model/markovian_viewpoint_model.h',
         'model/mvdash_adaptation_algorithm.h',
-        'model/maximize_current_adaptation.h',        
+        'model/maximize_current_adaptation.h',    
+        'model/adaptation_test.h', #TEST   
         'helper/mvdash-helper.h',
         ]
 

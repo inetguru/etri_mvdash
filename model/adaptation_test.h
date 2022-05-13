@@ -16,22 +16,22 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef MAXIMIZE_CURRENT_ADAPTATION_H
-#define MAXIMIZE_CURRENT_ADAPTATION_H
+#ifndef ADAPTATION_TEST_H
+#define ADAPTATION_TEST_H
 
-#include "mvdash_adaptation_algorithm.h"
+#include "mvdash_adaptation_algorithm.h" // dion
 
 namespace ns3 {
 
-class maximizeCurrentAdaptation : public mvdashAdaptationAlgorithm
+class adaptationTest : public mvdashAdaptationAlgorithm
 {
 public:
-  maximizeCurrentAdaptation ( const t_videoDataGroup &videoData,
+  adaptationTest ( const t_videoDataGroup &videoData,
                         const struct playbackDataGroup & playData,
                         const struct bufferData & bufferData,
                         const struct downloadDataGroup & downData  );
 
-  int64_t SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint, std::vector <int32_t> *pIndexes,  int32_t group);
+  int64_t SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint, std::vector <int32_t> *pIndexes, int32_t group);
 
 protected:
 private :
@@ -40,4 +40,4 @@ private :
 
 } // namespace ns3
 
-#endif /* MAXIMIZE_CURRENT_ADAPTATION_H */
+#endif /* ADAPTATION_TEST_H */
