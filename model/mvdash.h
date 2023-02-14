@@ -39,12 +39,12 @@ enum segmentEvent {
 
 struct st_mvdashRequest
 {
-  int32_t id;
+  int32_t id; //request ID
   int32_t viewpoint;
-  int32_t timeIndex;
+  int32_t timeIndex; //segmentID
   int32_t qualityIndex;
   int32_t segmentSize;
-  int32_t group=1; //Group=1, 0 as single
+  int32_t group = 1; //Group=1, 0 as single
   st_mvdashRequest (){};
   st_mvdashRequest (int32_t i, int32_t v, int32_t t, int32_t q, int32_t s)
       : id (i), viewpoint (v), timeIndex (t), qualityIndex (q), segmentSize (s){};
@@ -63,6 +63,13 @@ struct mvdashAlgorithmReply
       nextDownloadDelay; //!< delay time in microseconds when the next segment shall be requested from the server
   int64_t
       nextRepIndex; //!< representation level index of the next segement to be downloaded by the client
+  int64_t
+      decisionTime; //!< time in microsends when the adaptation algorithm decided which segment to download next, only for logging purposes
+  int64_t
+      decisionCase; //!< indicate in which part of the adaptation algorithm's code the decision was made, which representation level to request next, only for logging purposes
+  int64_t
+      delayDecisionCase; //!< indicate in which part of the adaptation algorithm's code the decision was made, how much time in microsends to wait until the segment shall be requested from server, only for logging purposes
+  int skip_requestSegment; //skip download current segment (used by single request)
 };
 
 struct videoData
@@ -71,6 +78,7 @@ struct videoData
       segmentSize; //!< vector holding representation levels in the first dimension and their particular segment sizes in bytes in the second dimension
   std::vector<double>
       averageBitrate; //!< holding the average bitrate of a segment in representation i in bits
+  std::vector<double> vmaf; //!<hold vmaf score
   int64_t segmentDuration; //!< duration of a segment in microseconds
 };
 
@@ -84,32 +92,34 @@ struct playbackDataGroup
   std::vector<int64_t>
       playbackStart; //!< Point in time in microseconds when playback of this segment started
   std::vector<std::vector<int32_t>> qualityIndex; //!< Index of the video quality
-
 };
 
 struct st_requestTimeInfo
 {
-  int64_t requestSent;
-  int64_t downloadStart;
-  int64_t downloadEnd;
+  int64_t
+      requestSent; //!< Simulation time in microseconds when a segment was requested by the client
+  int64_t
+      downloadStart; //!< Simulation time in microseconds when the first packet of a segment was received
+  int64_t
+      downloadEnd; ///!< Simulation time in microseconds when the last packet of a segment was received
 };
 
-
 //For LOG donwload
-struct downloadDataGroup
+struct downloadData
 {
-  std::vector<int32_t> id;
+  std::vector<int32_t> id; //download id
   std::vector<int32_t> playbackIndex; //!< Index of the video segment, should be the primary key
   std::vector<struct st_requestTimeInfo> time;
-  //  std::vector <int64_t> timeRequestSent;
-  //  std::vector <int64_t> timeDownloadStart;
-  //  std::vector <int64_t> timeDownloadEnd;
   std::vector<std::vector<int32_t>> qualityIndex;
-  std::vector<int32_t> group; // Group = 1 ,else 0
+  std::vector<int32_t> group; // REQUEST : Group = 1 ,else 0
+
+  // in future it should be a struct to hold multipriority with its probability
+  std::vector<int32_t> viewpointPriority; // viewpoint priority
 };
 
 //For playback
-struct downloadedSegment{
+struct downloadedSegment
+{
   std::vector<int32_t> id;
   std::vector<int32_t> redownload; // redownload = 1 ,else 0
   std::vector<std::vector<int32_t>> qualityIndex;
@@ -117,12 +127,27 @@ struct downloadedSegment{
 
 struct bufferData
 {
+
   std::vector<int64_t> timeNow; //!< current simulation time
   std::vector<int64_t>
       bufferLevelOld; //!< buffer level in microseconds before adding segment duration (in microseconds) of just downloaded segment
   std::vector<int64_t>
       bufferLevelNew; //!< buffer level in microseconds after adding segment duration (in microseconds) of just downloaded segment
+  std::vector<int32_t> segmentID; //information on filled segment --> for single request
+
+  std::vector<int64_t>
+      hybrid_bufferLevelOld; //!< buffer level in microseconds after adding segment duration (in microseconds) of just downloaded segment
+  std::vector<int64_t>
+      hybrid_bufferLevelNew; //!< buffer level in microseconds after adding segment duration (in microseconds) of just downloaded segment
 };
+
+typedef std::vector<struct bufferData> bufferDataGroup; //hold bufferData for each viewpoint
+
+// //For Bandwidht management Log
+// struct bandwidthManagement{
+//   std::vector<int32_t> id;
+//   std::vector<double> bandwidth; // downloaded bandwidth
+// };
 
 } // namespace ns3
 

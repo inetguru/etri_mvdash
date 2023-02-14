@@ -27,18 +27,22 @@ namespace ns3 {
 class mvdashAdaptationAlgorithm : public Object
 {
 public:
-  mvdashAdaptationAlgorithm ( const t_videoDataGroup &videoData,
-                        const struct playbackDataGroup & playData,
-                        const struct bufferData & bufferData,
-                        const struct downloadDataGroup & downData  );
+  mvdashAdaptationAlgorithm (const t_videoDataGroup &videoData,
+                             const struct playbackDataGroup &playData,
+                             const bufferDataGroup &bufferData,
+                             const struct downloadData &downData);
 
-  virtual int64_t SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint, std::vector <int32_t> *pIndexes,  int32_t group) = 0; //TEST
+  //isGroup : Request -> group true, single false
+  //isVpChange : Viewpoint change true/false
+  virtual mvdashAlgorithmReply SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
+                                                  std::vector<int32_t> *pIndexes, bool isGroup,
+                                                  bool isVpChange) = 0;
 
 protected:
-  const t_videoDataGroup & m_videoData;
-  const struct playbackDataGroup & m_playData;
-  const struct bufferData & m_bufferData;
-  const struct downloadDataGroup &m_downData;
+  const t_videoDataGroup &m_videoData;
+  const struct playbackDataGroup &m_playData;
+  const bufferDataGroup &m_bufferData;
+  const struct downloadData &m_downData;
 };
 } // namespace ns3
 

@@ -28,37 +28,37 @@ NS_OBJECT_ENSURE_REGISTERED (maximizeCurrentAdaptation);
 
 maximizeCurrentAdaptation::maximizeCurrentAdaptation (const t_videoDataGroup &videoData,
                                                       const struct playbackDataGroup &playData,
-                                                      const struct bufferData &bufferData,
-                                                      const struct downloadDataGroup &downData)
+                                                      const  bufferDataGroup &bufferData,
+                                                      const struct downloadData &downData)
     : mvdashAdaptationAlgorithm (videoData, playData, bufferData, downData)
 {
   NS_LOG_FUNCTION (this);
   m_nViewpoints = videoData.size ();
 }
 
-int64_t
+mvdashAlgorithmReply
 maximizeCurrentAdaptation::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
-                                              std::vector<int32_t> *pIndexes,  int32_t group)
+                                              std::vector<int32_t> *pIndexes, bool isGroup, bool isVpChange)
 {
   int vp;
   int qIndexForCurView = 0;
 
-  NS_LOG_INFO ("=========================== : " << tIndexReq <<" --> " << curViewpoint);
+  NS_LOG_INFO ("=========================== : " << tIndexReq << " --> " << curViewpoint);
 
   //   Set all view with rate index 0, especialy not the current view
   for (vp = 0; vp < m_nViewpoints; vp++)
     if (vp != curViewpoint)
-      (*pIndexes)[vp] = 0; 
-      // (*pIndexes)[vp] = 1; //DION_TEST
+      (*pIndexes)[vp] = 0;
+  // (*pIndexes)[vp] = 1; //DION_TEST
 
-  //sEGMENT INDEX 
+  //sEGMENT INDEX
   if (tIndexReq > 0)
     {
 
       // Estimate Avaiable Bandwidth
       int64_t timeNow = Simulator::Now ().GetMicroSeconds ();
       int32_t idLast = m_downData.playbackIndex.back (); //last index od download data
-    //   NS_LOG_INFO ("TEEEEEEEEEEEEEEEEEEEEE : " << m_downData.time[idLast].downloadEnd);
+      //   NS_LOG_INFO ("TEEEEEEEEEEEEEEEEEEEEE : " << m_downData.time[idLast].downloadEnd);
 
       //if the download time is -, set id last as previous
       if (m_downData.time[idLast].downloadEnd <= 0)
@@ -68,8 +68,7 @@ maximizeCurrentAdaptation::SelectRateIndexes (int32_t tIndexReq, int32_t curView
 
       //Calculate delay
       int64_t tDelay = m_downData.time[idLast].downloadEnd - m_downData.time[idLast].requestSent;
-      int64_t dataSize = 0; 
-
+      int64_t dataSize = 0;
 
       //Calculate Size of downloaded segment based on quality of each view point
       for (vp = 0; vp < m_nViewpoints; vp++)
@@ -77,10 +76,9 @@ maximizeCurrentAdaptation::SelectRateIndexes (int32_t tIndexReq, int32_t curView
           dataSize += m_videoData[vp].segmentSize[m_downData.qualityIndex[idLast][vp]][idLast];
         }
 
-    //Estimate BW = data/(delay * duration)
+      //Estimate BW = data/(delay * duration)
       double bwBytesPerDuration = (double) dataSize / tDelay * m_videoData[0].segmentDuration;
-
-      // #ifdef MY_NS_LOG_INFO
+       // #ifdef MY_NS_LOG_INFO
       //         NS_LOG_INFO("tDelay : " << tDelay
       //             << " dataSize : " << dataSize
       //             << " bwPerDuration : " << bwBytesPerDuration
@@ -108,7 +106,6 @@ maximizeCurrentAdaptation::SelectRateIndexes (int32_t tIndexReq, int32_t curView
       //         );
       // #endif
 
-
       //Calculate other datasize
       int64_t dataSizeToSend = 0;
       for (vp = 0; vp < m_nViewpoints; vp++)
@@ -118,8 +115,8 @@ maximizeCurrentAdaptation::SelectRateIndexes (int32_t tIndexReq, int32_t curView
         }
 
       //Available time = buffertime - margin
-      int64_t tAvailable = m_bufferData.bufferLevelNew.back () -
-                           (timeNow - m_bufferData.timeNow.back ()) -
+      int64_t tAvailable = m_bufferData[curViewpoint].bufferLevelNew.back () -
+                           (timeNow - m_bufferData[curViewpoint].timeNow.back ()) -
                            m_videoData[0].segmentDuration;
 
       //mAXIMUM data alowed for current view rate
@@ -128,17 +125,15 @@ maximizeCurrentAdaptation::SelectRateIndexes (int32_t tIndexReq, int32_t curView
           dataSizeToSend;
 
       // NS_LOG_INFO ("data allowed : " << dataAllowed);
-      
 
-// #ifdef MY_NS_LOG_INFO
-//       NS_LOG_INFO ("dataSizeToSend : "
-//                    << dataSizeToSend << " tAvailable : " << tAvailable << " dataAllowed : "
-//                    << dataAllowed << " q4 : " << m_videoData[curViewpoint].segmentSize[3][tIndexReq]
-//                    << " q3 : " << m_videoData[curViewpoint].segmentSize[2][tIndexReq]
-//                    << " q2 : " << m_videoData[curViewpoint].segmentSize[1][tIndexReq]
-//                    << " q1 : " << m_videoData[curViewpoint].segmentSize[0][tIndexReq]);
-// #endif
-
+      // #ifdef MY_NS_LOG_INFO
+      //       NS_LOG_INFO ("dataSizeToSend : "
+      //                    << dataSizeToSend << " tAvailable : " << tAvailable << " dataAllowed : "
+      //                    << dataAllowed << " q4 : " << m_videoData[curViewpoint].segmentSize[3][tIndexReq]
+      //                    << " q3 : " << m_videoData[curViewpoint].segmentSize[2][tIndexReq]
+      //                    << " q2 : " << m_videoData[curViewpoint].segmentSize[1][tIndexReq]
+      //                    << " q1 : " << m_videoData[curViewpoint].segmentSize[0][tIndexReq]);
+      // #endif
 
       //set Best rate where it bellow data allowed
       if (dataAllowed > 0)
@@ -154,17 +149,20 @@ maximizeCurrentAdaptation::SelectRateIndexes (int32_t tIndexReq, int32_t curView
             }
         }
 
-// #ifdef MY_NS_LOG_INFO
-//       NS_LOG_INFO ("Q Index for MainView : "
-//                    << qIndexForCurView << " segmentSize : "
-//                    << m_videoData[curViewpoint].segmentSize[qIndexForCurView][tIndexReq]);
-// #endif
-      
+      // #ifdef MY_NS_LOG_INFO
+      //       NS_LOG_INFO ("Q Index for MainView : "
+      //                    << qIndexForCurView << " segmentSize : "
+      //                    << m_videoData[curViewpoint].segmentSize[qIndexForCurView][tIndexReq]);
+      // #endif
+
       //Set current view rate
       // qIndexForCurView=1; //DION_TEST
       (*pIndexes)[curViewpoint] = qIndexForCurView;
     }
-  return 0;
+  mvdashAlgorithmReply results;
+  results.nextDownloadDelay = 0;
+
+  return results;
 }
 
 } // namespace ns3

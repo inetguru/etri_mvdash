@@ -28,10 +28,12 @@ class maximizeCurrentAdaptation : public mvdashAdaptationAlgorithm
 public:
   maximizeCurrentAdaptation ( const t_videoDataGroup &videoData,
                         const struct playbackDataGroup & playData,
-                        const struct bufferData & bufferData,
-                        const struct downloadDataGroup & downData  );
+                        const bufferDataGroup & bufferData,
+                        const struct downloadData & downData  );
 
-  int64_t SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint, std::vector <int32_t> *pIndexes,  int32_t group);
+  //isGroup : Request -> group true, single false
+  //isVpChange : Viewpoint change true/false 
+  mvdashAlgorithmReply SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint, std::vector <int32_t> *pIndexes, bool isGroup, bool isVpChange);
 
 protected:
 private :

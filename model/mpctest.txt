@@ -1,0 +1,317 @@
+/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+/*
+ * Copyright 2021 ETRI (Electronic and Telecommunication Research Institute) KOREA
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation;
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+#include <ns3/core-module.h>
+#include "adaptation_mpc.h" // dion
+#include <numeric>
+#include <cstdlib>
+#include <vector>
+#include <cmath>
+
+namespace ns3 {
+
+NS_LOG_COMPONENT_DEFINE ("adaptationMpc");
+
+NS_OBJECT_ENSURE_REGISTERED (adaptationMpc);
+
+// #define MY_NS_LOG_INFO
+
+adaptationMpc::adaptationMpc (const t_videoDataGroup &videoData,
+                              const struct playbackDataGroup &playData,
+                              const bufferDataGroup &bufferData,
+                              const struct downloadDataGroup &downData)
+    : mvdashAdaptationAlgorithm (videoData, playData, bufferData, downData)
+{
+  NS_LOG_FUNCTION (this);
+  m_nViewpoints = videoData.size ();
+  default_quality = 0;
+  s_info = 5;
+  s_len = 5;
+  a_dim = videoData[0].segmentSize.size (); // repesentation count
+  mpc_future_count = 5;
+}
+
+mvdashAlgorithmReply
+adaptationMpc::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
+                                  std::vector<int32_t> *pIndexes, bool isGroup, bool isVpChange)
+{
+  int vp;
+  int video_chunk_total = m_videoData[0].segmentSize[0].size () - 1;
+  //   int qIndexForCurView = 0;
+
+  // Set all view with rate index 0, except the current view
+  for (vp = 0; vp < m_nViewpoints; vp++)
+    if (vp != curViewpoint)
+      (*pIndexes)[vp] = 0;
+
+  if (tIndexReq > 0)
+    {
+
+      int64_t idLast = m_downData.id.back (); //last index of downloaded data
+      int32_t segmentLast = m_downData.playbackIndex[idLast]; //chunk ID of the last downloaded data
+      int video_chunk_remain = video_chunk_total - tIndexReq;
+      // int32_t temp_tIndexReq = idLast + 1; //------------------------------------------------
+
+      NS_LOG_INFO ("idLast - segmentID - chunk remain : " << idLast << " - " << segmentLast << " - "
+                                                          << video_chunk_remain);
+      // past errors in bandwidth
+      std::vector<double> past_bandwidht;
+      std::vector<double> past_errors;
+      std::vector<double> past_bandwidth_ests;
+      //bitrate
+      int32_t bitrate_previous = m_downData.qualityIndex[idLast][curViewpoint];
+      int32_t bitrate = default_quality;
+      //Combo options
+      std::vector<std::vector<int>> CHUNK_COMBO_OPTIONS = combinatorial (a_dim, mpc_future_count);
+      //moving window
+      // std::vector<int64_t> r_batch;
+      // std::vector<std::vector<int64_t>> s_batch (s_info, std::vector<int64_t> (s_len, 0));
+
+      // for (int i = 0; i < (int) s_batch.size (); i++)
+      //   {
+      //     std::string logStr;
+
+      //     for (int j = 0; j < (int) s_batch[i].size (); j++)
+      //       {
+      //         logStr.append (std::to_string (s_batch[i][j]) + " ");
+      //       }
+      //     NS_LOG_INFO (logStr);
+      //   }
+
+      //=================================================================================================
+      //  while (true){}
+      int64_t reward = 0;
+
+      int32_t idTimeLast = m_downData.time.size () - 1; //last time index of download data
+      int64_t tDelay =
+          m_downData.time[idTimeLast].downloadEnd - m_downData.time[idTimeLast].requestSent; //in ms
+
+      //Calculate QoE
+      int64_t qoe_buffer =
+          std::max ((int64_t) 0, (tDelay - m_bufferData[curViewpoint].bufferLevelNew.back ()));
+      int64_t qoe_quality = m_videoData[curViewpoint].averageBitrate.at (bitrate) ; ///check unit -------------------
+      int64_t qoe_variation = m_videoData[curViewpoint].averageBitrate.at (bitrate) -
+                              m_videoData[curViewpoint].averageBitrate.at (bitrate_previous); ///check unit -------------------
+
+      reward = qoe_quality - qoe_variation - qoe_buffer;
+
+      // r_batch.push_back (reward);
+      NS_LOG_INFO ("Reward, quality, variation, buffer " << reward << " - " << qoe_quality << " "
+                                                         << qoe_variation << " " << qoe_buffer);
+      bitrate_previous = bitrate; //--------------------------------------
+
+      // //Dequeue history (moving horizon)
+      // for (int i = 0; i < (int) s_batch.size (); i++)
+      //   {
+      //     s_batch[i].erase (s_batch[i].begin ()); //remove first elm
+      //     s_batch[i].push_back (0); //initialize last eml
+      //   }
+
+      // //Set last elm
+      // s_batch[0].back () = m_videoData[curViewpoint].averageBitrate.at (bitrate); //bitrate
+      // s_batch[1].back () = m_bufferData[curViewpoint].bufferLevelNew.back (); //buffer level
+      // s_batch[2].back () = std::max (
+      //     (int64_t) 0, (tDelay - m_bufferData[curViewpoint].bufferLevelNew.back ())); //rebuffering
+      // s_batch[3].back () = m_videoData[curViewpoint].segmentSize[bitrate][temp_tIndexReq - 1] /
+      //                      tDelay; //bandwidth = segment size/downtime
+      // s_batch[4].back () = std::min (video_chunk_remain, video_chunk_total) / video_chunk_total;
+
+      // for (int i=0;i<(int) s_batch.size();i++){
+      //   for (int j=0;j<(int)s_batch[i].size();j++){
+      //       NS_LOG_INFO(s_batch[i][j]);
+      //   }
+      //   NS_LOG_INFO(" ");
+      // // NS_LOG_INFO (std::min (video_chunk_remain, video_chunk_total) << " - " << video_chunk_total << " - " << std::min (video_chunk_remain, video_chunk_total) / video_chunk_total);
+      // }
+
+      //   NS_LOG_INFO (s_batch[0].back () << " - " << s_batch[1].back()<< " - " << s_batch[2].back () << " - " << s_batch[3].back()<< " - " << s_batch[4].back());
+
+      // --------------MPC---------------
+
+      //-----BW Error control-----
+      double bw_prev = ((m_videoData[curViewpoint].averageBitrate.at (bitrate_previous) *
+                         m_videoData[0].segmentDuration) /
+                        tDelay); //bandwidth = avgrate*duration/downtime
+      //  int64_t bw_prev =m_videoData[curViewpoint].segmentSize[bitrate][segmentLast] / tDelay /
+      // 1e6; //bandwidth = segment size/downtime
+      int64_t curr_error = 0; // we cannot predict the initial request
+      if (past_bandwidth_ests.size () > 0)
+        {
+          curr_error = abs (past_bandwidth_ests.back () - bw_prev) / bw_prev;
+        }
+      past_errors.push_back (curr_error);
+      past_bandwidht.push_back (bw_prev);
+
+      //keep 5 past information only
+      if ((int) past_errors.size () > s_len)
+        past_errors.erase (past_errors.begin ());
+      if ((int) past_bandwidht.size () > s_len)
+        past_bandwidht.erase (past_bandwidht.begin ());
+
+      //-----BW estimation-----
+      //get harmonic mean of past 5 BW, non 0
+      double bw_sum = 0;
+      for (auto &p : past_bandwidht)
+        bw_sum += (1.0 / p);
+
+      double harmonic_bandwidth = 1.0 / (bw_sum / past_bandwidht.size ());
+      NS_LOG_INFO ("BW prev " << bw_prev << "-" << bw_sum << " " << harmonic_bandwidth);
+
+      //-----BW estimation-----
+      //get harmonic mean of past 5 BW, non 0
+      double bw_error = 0;
+      for (auto &p : past_errors)
+        bw_error = std::max (bw_error, p);
+
+      double bw_future = harmonic_bandwidth / (1.0 + bw_error); //--> robust MPC
+      past_bandwidth_ests.push_back (bw_future);
+
+      // int harmonic_count = (int) s_batch[3].size () - 5; //5 past bw
+      // int64_t non_zero = 0;
+      // for (int i = s_batch[3].size () - 1; i >= harmonic_count; i--)
+      //   {
+
+      //     if (s_batch[3].at (i) != 0)
+      //       {
+      //         non_zero = non_zero + 1;
+      //         bw_sum = bw_sum + (1 / s_batch[3].at (i));
+      //       }
+      //   }
+      // int64_t bw_harmonic = bw_sum / 5;
+
+      // NS_LOG_INFO (bw_sum << " " << bw_harmonic << " ");
+
+      // //Future BW prediction up to 5 error
+      // int64_t max_error = 0;
+      // int error_pos = 5;
+      // if (past_errors.size () < 5)
+      //   {
+      //     error_pos = past_errors.size ();
+      //   }
+
+      // for (int i = past_errors.size () - 1; i >= (int) past_errors.size () - error_pos; i--)
+      //   {
+      //     if (past_errors[i] > max_error)
+      //       {
+      //         max_error = past_errors[i];
+      //       }
+      //   }
+
+      // int64_t bw_future = bw_harmonic / (1 + max_error);
+      // past_bandwidth_ests.push_back (bw_harmonic);
+
+      //future chunks length(try 4 if that many remaining)
+      int last_index = (int) (video_chunk_total - video_chunk_remain);
+      int future_chunk_length = mpc_future_count;
+      if (video_chunk_total - last_index < mpc_future_count)
+        {
+          future_chunk_length = video_chunk_total - last_index;
+        } //make sure the maximum is 5
+
+      NS_LOG_INFO ("Future chunk" << video_chunk_total << " - " << last_index << " "
+                                  << video_chunk_remain << " " << future_chunk_length);
+
+      int bitrate_opt = 0;
+      int max_reward = -100000000;
+      int64_t start_buffer = m_bufferData[curViewpoint].bufferLevelNew.back ();
+
+      //iterate through each combination
+      for (auto &combo : CHUNK_COMBO_OPTIONS)
+        {
+          int64_t curr_buffer = start_buffer;
+          int64_t curr_rebuffer_time = 0;
+          int64_t bitrate_sum = 0;
+          int64_t smooth_diff = 0;
+          int64_t bitrate_last = bitrate_previous; //last downloaded chunk quality
+
+          // iterate through quality combination for each future chunk
+          for (auto pos = 0; pos < future_chunk_length; pos++)
+            {
+
+              auto chunk_quality = combo[pos];
+              auto index = last_index + 1 + pos; //get next chunk
+              int64_t chunk_size = m_videoData[curViewpoint].segmentSize[chunk_quality][index];
+              int64_t download_time = chunk_size / bw_future / 1000000; //MB/s to s
+
+              // NS_LOG_INFO (" " << bw_future << " ");
+
+              if (curr_buffer < download_time)
+                {
+                  curr_rebuffer_time += (download_time - curr_buffer);
+                  curr_buffer = 0;
+                }
+              else
+                {
+                  curr_buffer -= download_time;
+                }
+
+              curr_buffer += 2;
+              bitrate_sum += m_videoData[curViewpoint].averageBitrate.at (chunk_quality);
+              smooth_diff += std::abs (m_videoData[curViewpoint].averageBitrate.at (chunk_quality) -
+                                       m_videoData[curViewpoint].averageBitrate.at (bitrate_last));
+              bitrate_last = chunk_quality;
+            }
+
+          reward = (bitrate_sum / 1000) - (curr_rebuffer_time) - (smooth_diff);
+
+          if (reward > max_reward)
+            {
+              max_reward = reward;
+              bitrate_opt = combo[0];
+            }
+        }
+
+      bitrate = bitrate_opt;
+      NS_LOG_INFO (" Optimum " << bitrate);
+    }
+  mvdashAlgorithmReply results;
+  results.nextDownloadDelay = 0;
+
+  return results;
+}
+
+std::vector<std::vector<int>>
+adaptationMpc::combinatorial (int a_dim, int mpc_future_count)
+{
+
+  std::vector<std::vector<int>> CHUNK_COMBO_OPTIONS;
+
+  for (auto idx = 0; idx < std::pow (a_dim, mpc_future_count); idx++)
+    {
+      std::vector<int> vec;
+      int j = idx;
+      for (auto i = 0; i < mpc_future_count; ++i)
+        {
+          auto tmp = j % a_dim;
+          vec.push_back (tmp);
+          j /= a_dim;
+        }
+      CHUNK_COMBO_OPTIONS.push_back (vec);
+    }
+  // for (int i = 0; i < (int) CHUNK_COMBO_OPTIONS.size (); i++)
+  //   {
+  //     std::string logStr;
+  //     for (int j = 0; j < (int) CHUNK_COMBO_OPTIONS[i].size (); j++)
+  //       {
+  //         logStr.append (std::to_string (CHUNK_COMBO_OPTIONS[i][j]) + " ");
+  //       }
+  //     NS_LOG_INFO (logStr);
+  //   }
+  return CHUNK_COMBO_OPTIONS;
+}
+
+} // namespace ns3

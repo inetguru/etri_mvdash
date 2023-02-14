@@ -46,21 +46,21 @@ main (int argc, char *argv[])
   SetLogLevel (LOG_LEVEL_INFO); // LOG_LEVEL_INFO; LOG_LEVEL_LOGIC; LOG_ALL;
   SetConfig ();
   // ===========================================================================================
-  // Simulation Parameters & Variables for Command Line Arguments
+  // Simulation Parameters & Variables for Command Line Argumentsd
   uint32_t simId = 0; // The simulation id is used to distinguish log file
-  double simTime = 50.0; // Simulation Finish Time in seconds
-  uint32_t useHttp3 = 1; // 0 - HTTP2/TCP, 1 - HTTP3/QUIC
-  uint32_t useDynamicBW = 0; // 0 - Dynamic Bandwidth Off, 1 - Dynamic Bandwidth On
+  double simTime =50.0; // Simulation Finish Time in seconds
+  uint32_t useHttp3 = 0; // 0 - HTTP2/TCP, 1 - HTTP3/QUIC
+  uint32_t useDynamicBW =0; // 0 - Dynamic Bandwidth Off, 1 - Dynamic Bandwidth On
   int nClients = 1;
 
   std::string bwInit = "5Mbps";
   std::string path = "./contrib/etri_mvdash/";
   std::string bwTrace = "sbwtrace_5Mbps_max.csv";
   std::string vpInfo = "viewpoint_transition.csv";
+  std::string mvInfo = "dataset_size.csv";
   std::string vpModel = "free"; //[free or markovian]
-  std::string mvInfo = "multiviewvideo.csv";
-  std::string mvAlgo = "adaptation_test"; //[maximize_current or ]
-  std::string reqType = "hybrid"; //DION Test [group or hybrid]
+  std::string mvAlgo = "adaptation_mpc"; //[maximize_current or adaptation_test or adaptation_tobasco or adaptation_panda]
+  std::string reqType = "group"; //DION Test [group or hybrid]
 
   CommandLine cmd;
   cmd.Usage ("ETRI Multi-View Video DASH Streaming Simulation.\n");
@@ -74,8 +74,8 @@ main (int argc, char *argv[])
   cmd.AddValue ("vpInfo", "The name of the file containing viewpoint switching info", vpInfo);
   cmd.AddValue ("vpModel", "[markovian, free]", vpModel);
   cmd.AddValue ("mvInfo", "The name of the file containing Multi-View video source info", mvInfo);
-  cmd.AddValue ("mvAlgo", "[maximize_current,newone, adaptation_test]", mvAlgo);
-  cmd.AddValue ("reqType", "[group, hybrid]", reqType);
+  cmd.AddValue ("mvAlgo", "[maximize_current,newone, adaptation_test, adaptation_tobasco, adaptation_panda]", mvAlgo);
+  cmd.AddValue ("reqType", "[group, hybrid, single]", reqType);
   cmd.Parse (argc, argv);
 
   // ===========================================================================================
@@ -154,9 +154,9 @@ main (int argc, char *argv[])
       mvclient->TraceConnectWithoutContext ("ControllerTrace",
                                             MakeCallback (&ControllerTraceHandler));
       // mvclient->TraceConnectWithoutContext ("RequestTrace", MakeCallback (&RequestTraceHandler));
-      //    mvclient->TraceConnectWithoutContext ("SegmentTrace", MakeCallback (&SegmentTraceHandler));
-      // //    mvclient->TraceConnectWithoutContext ("Tx", MakeCallback (&TxHandler));
-      //    mvclient->TraceConnectWithoutContext ("Rx", MakeCallback (&RxHandler));
+        //  mvclient->TraceConnectWithoutContext ("SegmentTrace", MakeCallback (&SegmentTraceHandler));
+      //    mvclient->TraceConnectWithoutContext ("Tx", MakeCallback (&TxHandler));
+        //  mvclient->TraceConnectWithoutContext ("Rx", MakeCallback (&RxHandler));
     }
 
   clientApps.Stop (Seconds (simTime));
@@ -173,11 +173,15 @@ SetLogLevel (LogLevel log_precision)
 {
   LogComponentEnable ("mvdash", log_precision);
   LogComponentEnable ("mvdashClient", log_precision);
-  LogComponentEnable ("mvdashServer", log_precision);
-  LogComponentEnable ("maximizeCurrentAdaptation", log_precision);
-  LogComponentEnable ("Free_Viewpoint_Model", log_precision);
+  // LogComponentEnable ("mvdashServer", log_precision);
+  // LogComponentEnable ("maximizeCurrentAdaptation", log_precision);
+  // LogComponentEnable ("Free_Viewpoint_Model", log_precision);
   LogComponentEnable ("adaptationTest", log_precision);
-  LogComponentEnable ("MultiView_Model", log_precision);
+  // LogComponentEnable ("adaptationTobasco", log_precision);
+  // LogComponentEnable ("adaptationPanda", log_precision);
+  LogComponentEnable ("adaptationMpc", log_precision);
+  LogComponentEnable ("adaptationQmetric", log_precision);
+  // LogComponentEnable ("MultiView_Model", log_precision);
 }
 
 void

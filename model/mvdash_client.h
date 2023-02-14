@@ -42,7 +42,7 @@ enum controllerState { initial, downloading, downloadingPlaying, playing, termin
 /**
   * \brief This enum is used to define the controller events of the state machine which controls the behaviour of the client.
   */
-enum controllerEvent { downloadFinished, playbackFinished, irdFinished, init };
+enum controllerEvent { downloadFinished, playbackFinished, irdFinished, init, viewChange };
 
 enum controllerTraceEvent {
   cteSendRequest,
@@ -93,15 +93,33 @@ protected:
   virtual void DoDispose (void);
 
 private:
-  bool Req_buffering = false;
+  bool Req_buffering = false; //playback tracing : buffering or not
   bool Req_Type = false; // hybrid true, group false
-  bool Req_pending = false; //DION Test
-  int Req_m_tIndexReqSent = -1; //DION Test
-  int32_t Req_m_tIndexDownloaded;
+  bool Req_single = false; //group request is pending or not
+  int Req_m_tIndexReqSent; //Segment index
+  int32_t Req_m_tIndexDownloaded; //Segment index
 
+  int32_t indexDownload; //helper for single/group
+  int32_t segment_LastBuffer;
   // inherited from Application base class.
   virtual void StartApplication (void); // Called at time specified by Start
   virtual void StopApplication (void); // Called at time specified by Stop
+
+  /**
+ * @brief Hybrid Request canceling
+ * 
+ *  case 1: current playback is the last buffered segment, continue group request
+ *  case 2: when asking segment n+2 because not enough time to download n+1 >0 quality, but n+2 is not buffered yet
+ */
+  bool Req_HybridCanceling ();
+
+  /**
+ * @brief Hybrid request segment selection'
+ * Due to not enough time to download choosed segment, skip to n+1
+ * 
+ * @return int 
+ */
+  int Req_HybridSegmentSelection ();
 
   /**
    * \brief Handle a packet received by the application
@@ -121,7 +139,7 @@ private:
 
   struct st_mvdashRequest *PrepareRequest (int tIndexDownload);
   int SendRequest (struct st_mvdashRequest *pMsg, int nReq);
-  
+
   /**
  * @brief 
   * In the Request -> Response system, the most important part is m_downData.time
@@ -150,10 +168,17 @@ private:
 
   int ReadInBitrateValues (std::string segmentSizeFile);
 
+  /**
+   * @brief Calculate PSNR
+   * 
+   * @param segmentSizeFile 
+   * @return int 
+   */
+
+  void read_VMAF ();
   void LogPlayback (void);
   void LogDownload (void);
   void LogBuffer (void);
-
   void SelectRateIndexes (int tIndexReq, std::vector<int32_t> *pIndexes);
 
   Ptr<Socket> m_socket; //!< Socket
@@ -168,14 +193,19 @@ private:
 
   controllerState m_state;
 
-  int32_t m_tIndexLast;
+  st_mvdashRequest *pReq;
+  int64_t m_delay; //delay due to buffer control
+  int32_t m_tIndexLast; //last index by reading video files
   int32_t m_tIndexPlay;
   int32_t m_tIndexReqSent;
-  int32_t m_tIndexDownloaded;
+  int32_t m_tIndexDownloaded; //count downloaded segment
   int32_t m_bytesReceived;
   int32_t m_sendRequestCounter;
   int32_t m_recvRequestCounter;
+  int skip_requestSegment; //skip request if not enough time to download > 0 quality
   bool m_segStarted;
+
+  // int request_prevType; // group : 1, single : 0
 
   int32_t m_nViewpoints;
 
@@ -184,15 +214,17 @@ private:
 
   //std::vector <videoData> m_videoData;
   t_videoDataGroup m_videoData;
-  struct downloadDataGroup m_downData;
+  struct downloadData m_downData;
   struct downloadedSegment m_downSegment; //TEST --> Playback (merging group & single request)
   struct playbackDataGroup m_playData;
-  struct bufferData m_bufferData;
+  // struct bufferData m_bufferData;
+
+  bufferDataGroup g_bufferData;
 
   std::vector<int64_t> m_timeReqSent;
   std::queue<st_mvdashRequest> m_requests;
 
-  //std::vector <st_mvdashRequest> m_requests;
+  // std::queue <st_mvdashRequest> m_pRequests;
 
   /// Traced Callback: The "RequestMessage" trace source
   TracedCallback<Ptr<const mvdashClient>, controllerState, controllerTraceEvent, int32_t>

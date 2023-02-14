@@ -18,6 +18,10 @@ def build(bld):
         'model/mvdash_adaptation_algorithm.cc',
         'model/maximize_current_adaptation.cc',
         'model/adaptation_test.cc', #TEST
+        'model/adaptation_tobasco.cc', #TEST
+        'model/adaptation_panda.cc', #TEST
+        'model/adaptation_mpc.cc', #TEST
+        'model/adaptation_qmetric.cc', #TEST
         'helper/mvdash-helper.cc',
         ]
 
@@ -45,6 +49,10 @@ def build(bld):
         'model/mvdash_adaptation_algorithm.h',
         'model/maximize_current_adaptation.h',    
         'model/adaptation_test.h', #TEST   
+        'model/adaptation_tobasco.h', #TEST   
+        'model/adaptation_panda.h', #TEST   
+        'model/adaptation_mpc.h', #TEST
+        'model/adaptation_qmetric.h', #TEST
         'helper/mvdash-helper.h',
         ]
 

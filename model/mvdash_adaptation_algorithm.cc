@@ -27,8 +27,8 @@ NS_OBJECT_ENSURE_REGISTERED (mvdashAdaptationAlgorithm);
 mvdashAdaptationAlgorithm::mvdashAdaptationAlgorithm (
                         const t_videoDataGroup &videoData,
                         const struct playbackDataGroup & playData,
-                        const struct bufferData & bufferData,
-                        const struct downloadDataGroup & downData) 
+                        const bufferDataGroup & bufferData,
+                        const struct downloadData & downData) 
 : m_videoData (videoData),
   m_playData (playData),  
   m_bufferData (bufferData),
