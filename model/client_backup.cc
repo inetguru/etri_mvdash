@@ -65,10 +65,6 @@ mvdashClient::GetTypeId (void)
               "MVInfo", "The relative path to the file containing the Multi-View Video Source Info",
               StringValue ("./contrib/etri_mvdash/multiviewvideo.csv"),
               MakeStringAccessor (&mvdashClient::m_mvInfoFilePath), MakeStringChecker ())
-          .AddAttribute (
-              "mvVmaf", "The relative path to the file containing the Multi-View Video Source VMAF",
-              StringValue ("./contrib/etri_mvdash/multiviewvideo.csv"),
-              MakeStringAccessor (&mvdashClient::m_mvVmafFilePath), MakeStringChecker ())
           .AddAttribute ("MVAlgo", "The Multi-View Video Streaming Adaptation Algorithm", // dion
                          StringValue ("adaptation_flush"), //maximize_current or adaptation_flush
                          MakeStringAccessor (&mvdashClient::m_mvAlgoName), MakeStringChecker ())
@@ -109,6 +105,8 @@ mvdashClient::mvdashClient ()
   m_tIndexPlay = 0;
   m_tIndexReqSent = -1;
   m_tIndexDownloaded = -1;
+  Req_m_tIndexReqSent = -1;
+  Req_m_tIndexDownloaded = -1;
 }
 
 mvdashClient::~mvdashClient ()
@@ -133,12 +131,25 @@ mvdashClient::Controller (controllerEvent event)
                                 << Simulator::Now ().GetSeconds () << " --- " << m_tIndexLast);
   if (m_state == initial)
     {
-      st_mvdashRequest *pReq = PrepareRequest (0);
-      if (SendRequest (pReq, 5))
+      if (Req_single) //__single code__
         {
-          m_state = downloading;
+          st_mvdashRequest *pReq = Hybrid_PrepareRequest (0);
+          if (Hybrid_SendRequest (pReq))
+            {
+              m_state = downloading;
+            }
+          free (pReq);
         }
-      free (pReq);
+      else // hybrid request adopt group request at init
+        {
+          st_mvdashRequest *pReq = PrepareRequest (0);
+          if (SendRequest (pReq, 5))
+            {
+              m_state = downloading;
+            }
+          free (pReq);
+        }
+
       return;
     }
 
@@ -149,6 +160,8 @@ mvdashClient::Controller (controllerEvent event)
         case downloadFinished:
           StartPlayback ();
           indexDownload = m_tIndexDownloaded;
+          if (Req_single) //Used for single request
+            indexDownload = Req_m_tIndexDownloaded;
 
           if (indexDownload >= m_tIndexLast) //finish to download final segment
             { // *e_df
@@ -157,12 +170,35 @@ mvdashClient::Controller (controllerEvent event)
             }
           else
             { // *e_d ----------------------------------------------------------------------------------------
-              st_mvdashRequest *pReq = PrepareRequest (m_tIndexReqSent + 1);
-              if (SendRequest (pReq, 5))
+
+              if (m_reqType == "hybrid")
                 {
-                  m_state = downloadingPlaying;
+                  Req_single = Req_HybridCanceling ();
+                  if (Req_single)
+                    Req_m_tIndexReqSent = Req_HybridSegmentSelection ();
                 }
-              free (pReq);
+
+              if (Req_single)
+                {
+
+                  st_mvdashRequest *pReq = Hybrid_PrepareRequest (Req_m_tIndexReqSent + 1);
+
+                  if (Hybrid_SendRequest (pReq))
+                    {
+                      m_state = downloadingPlaying;
+                    }
+                  free (pReq);
+                }
+
+              else
+                {
+                  st_mvdashRequest *pReq = PrepareRequest (m_tIndexReqSent + 1);
+                  if (SendRequest (pReq, 5))
+                    {
+                      m_state = downloadingPlaying;
+                    }
+                  free (pReq);
+                }
             }
           break;
         default:
@@ -176,31 +212,71 @@ mvdashClient::Controller (controllerEvent event)
       switch (event)
         {
         case viewChange: // case (viewChange || downloadFinished)
-          case downloadFinished: {
-            //prepare request first
-            st_mvdashRequest *pReq = PrepareRequest (m_tIndexReqSent + 1);
-            //Delay occurs
-            if (m_delay > 0 && m_tIndexDownloaded <= m_tIndexLast)
-              {
-                /*  e_dirs */
-                m_state = playing;
-                NS_LOG_INFO ("***Group IRD Start at"
-                             << Simulator::Now ().GetMicroSeconds () << " + " << m_delay << " finish at = "
-                             << Simulator::Now ().GetMicroSeconds () + m_delay);
-                controllerEvent ev = irdFinished;
-                Simulator::Schedule (MicroSeconds (m_delay), &mvdashClient::Controller, this, ev);
-              }
-            else if (m_tIndexDownloaded >= m_tIndexLast) //Already download last segment
-              { // *e_df
-                m_ctrlTrace (this, m_state, cteAllDownloaded, m_tIndexLast);
-                m_state = playing;
-              }
-            else //normal case, download new segment
-              { // *e_d
-                SendRequest (pReq, 5);
-              }
-            free (pReq);
-          }
+            // NS_LOG_INFO ("Redonwloadn ====================");
+        case downloadFinished:
+
+          if (m_reqType == "hybrid")
+            {
+              Req_single = Req_HybridCanceling ();
+              if (Req_single)
+                Req_m_tIndexReqSent = Req_HybridSegmentSelection ();
+            }
+
+          // NS_LOG_INFO ("Redonwloadn ====================" << Req_single);
+
+          //===============Request Handle=====================
+          if (Req_single)
+            {
+              st_mvdashRequest *pReq = Hybrid_PrepareRequest (Req_m_tIndexReqSent + 1);
+              if (m_delay > 0 && Req_m_tIndexDownloaded <= m_tIndexLast)
+                {
+                  /*  e_dirs */
+                  m_state = playing;
+                  NS_LOG_INFO ("***Single IRD Start" << Simulator::Now ().GetMicroSeconds ()
+                                                     << " - " << m_delay << " " << Req_single << " "
+                                                     << pReq->group);
+                  controllerEvent ev = irdFinished;
+                  Simulator::Schedule (MicroSeconds (m_delay), &mvdashClient::Controller, this, ev);
+                }
+              else if (Req_m_tIndexDownloaded >= m_tIndexLast)
+                { // *e_df
+                  m_ctrlTrace (this, m_state, cteAllDownloaded, m_tIndexLast);
+                  m_state = playing;
+                }
+              else
+                { //normal case, download new segment
+                  { // *e_d
+                    Hybrid_SendRequest (pReq);
+                  }
+                }
+              free (pReq);
+            }
+          else
+            {
+              //prepare request first
+              st_mvdashRequest *pReq = PrepareRequest (m_tIndexReqSent + 1);
+              //Delay occurs
+              if (m_delay > 0 && m_tIndexDownloaded <= m_tIndexLast)
+                {
+                  /*  e_dirs */
+                  m_state = playing;
+                  NS_LOG_INFO ("***Group IRD Start at"
+                               << Simulator::Now ().GetMicroSeconds () << " + " << m_delay << " = "
+                               << Simulator::Now ().GetMicroSeconds () + m_delay);
+                  controllerEvent ev = irdFinished;
+                  Simulator::Schedule (MicroSeconds (m_delay), &mvdashClient::Controller, this, ev);
+                }
+              else if (m_tIndexDownloaded >= m_tIndexLast) //Already download last segment
+                { // *e_df
+                  m_ctrlTrace (this, m_state, cteAllDownloaded, m_tIndexLast);
+                  m_state = playing;
+                }
+              else //normal case, download new segment
+                { // *e_d
+                  SendRequest (pReq, 5);
+                }
+              free (pReq);
+            }
           break;
         case playbackFinished: //---------------------------------------
           m_ctrlTrace (this, m_state, cteEndPlayback, m_tIndexPlay - 1);
@@ -219,14 +295,32 @@ mvdashClient::Controller (controllerEvent event)
     {
       switch (event)
         {
-          case irdFinished: /*  e_irc  */
-          {
-            m_state = downloadingPlaying;
-            NS_LOG_INFO ("*** IRD finish" << Simulator::Now ().GetMicroSeconds ());
-            st_mvdashRequest *pReq = PrepareRequest (m_tIndexReqSent + 1);
-            SendRequest (pReq, 5);
-            free (pReq);
-          }
+        case irdFinished: /*  e_irc  */
+          m_state = downloadingPlaying;
+          NS_LOG_INFO ("*** IRD finish" << Simulator::Now ().GetMicroSeconds () << " - "
+                                        << Req_single);
+
+          if (m_reqType == "hybrid")
+            {
+              Req_single = Req_HybridCanceling ();
+              if (Req_single)
+                Req_m_tIndexReqSent = Req_HybridSegmentSelection ();
+            }
+
+          //===============Request Handle=====================
+          if (Req_single)
+            {
+              st_mvdashRequest *pReq = Hybrid_PrepareRequest (Req_m_tIndexReqSent + 1);
+              Hybrid_SendRequest (pReq);
+              free (pReq);
+            }
+          else
+            {
+              st_mvdashRequest *pReq = PrepareRequest (m_tIndexReqSent + 1);
+              SendRequest (pReq, 5);
+              free (pReq);
+            }
+
           break;
         case playbackFinished:
           m_ctrlTrace (this, m_state, cteEndPlayback, m_tIndexPlay - 1);
@@ -251,6 +345,93 @@ mvdashClient::Controller (controllerEvent event)
     }
 }
 
+bool
+mvdashClient::Req_HybridCanceling ()
+{
+  segment_LastBuffer = g_bufferData[m_pViewModel->CurrentViewpoint ()].segmentID.back ();
+  if (Req_m_tIndexReqSent + 1 > segment_LastBuffer)
+    {
+      NS_LOG_INFO ("------------------------------------------------------------------ Cancel S "
+                   << Req_m_tIndexReqSent + 1);
+      Req_single = false;
+    }
+
+  return Req_single;
+}
+
+int
+mvdashClient::Req_HybridSegmentSelection ()
+{
+  NS_LOG_INFO ("--------------------------- Base Segment " << Req_m_tIndexReqSent + 1);
+
+  segment_LastBuffer = g_bufferData[m_pViewModel->CurrentViewpoint ()].segmentID.back ();
+  bool run = true;
+
+  //Segment already downloaded in high quality --> skip
+
+  while (run)
+    {
+      if (Req_m_tIndexReqSent + 1 <= segment_LastBuffer)
+        {
+          if (m_downSegment
+                  .qualityIndex[Req_m_tIndexReqSent + 1][m_pViewModel->CurrentViewpoint ()] >= 1)
+            Req_m_tIndexReqSent += 1;
+          else
+            run = false;
+        }
+      else
+        {
+          Req_single = false;
+          run = false;
+        }
+    }
+
+  NS_LOG_INFO ("--------------------------- Already downloaded? " << Req_m_tIndexReqSent + 1);
+
+  // Segment already played --> skip
+  run = true;
+  while (run)
+    {
+      std::vector<int>::iterator it;
+      it = find (m_playData.playbackIndex.begin (), m_playData.playbackIndex.end (),
+                 Req_m_tIndexReqSent + 1);
+      if (it != m_playData.playbackIndex.end ())
+        Req_m_tIndexReqSent += 1;
+      else
+        run = false;
+    }
+
+  NS_LOG_INFO ("--------------------------- Already played? " << Req_m_tIndexReqSent + 1);
+
+  // Not enough time --> skip
+  run = true;
+  while (run)
+    {
+      if (Req_m_tIndexReqSent + 1 > segment_LastBuffer)
+        {
+          Req_single = false;
+          run = false;
+        }
+      st_mvdashRequest *pReq = Hybrid_PrepareRequest (Req_m_tIndexReqSent + 1);
+      free (pReq);
+      if (skip_requestSegment == 1)
+        {
+          if (Req_m_tIndexReqSent + 2 > segment_LastBuffer)
+            {
+              Req_single = false;
+              run = false;
+            }
+          else
+            Req_m_tIndexReqSent += 1;
+        }
+      else
+        run = false;
+    }
+  NS_LOG_INFO ("--------------------------- Skip? " << Req_m_tIndexReqSent + 1 << " Req Single? "
+                                                    << Req_single);
+
+  return Req_m_tIndexReqSent;
+}
 
 // Application Methods
 void
@@ -324,6 +505,7 @@ mvdashClient::HandleRead (Ptr<Socket> socket)
 
   while ((packet = socket->Recv ()))
     {
+
       int64_t timeNow = Simulator::Now ().GetMicroSeconds ();
       if (packet->GetSize () == 0) // EOF
         break;
@@ -349,34 +531,181 @@ mvdashClient::HandleRead (Ptr<Socket> socket)
 
       if (m_bytesReceived >= curSeg.segmentSize)
         {
-          int success;
-          success = m_pRequestModel->readRequest (&m_requests, &m_tIndexDownloaded,
-                                                  m_recvRequestCounter, timeNow, curSeg);
-
-          if (success)
-            {
-              // m_reqTrace (this, reqev_endReceiving, m_tIndexDownloaded);
-              m_ctrlTrace (this, m_state, cteDownloaded, m_tIndexDownloaded);
-              controllerEvent ev = downloadFinished;
-              Controller (ev);
-            }
-
           m_bytesReceived -= curSeg.segmentSize;
           m_segTrace (this, segev_endReceiving, curSeg);
           m_segStarted = false;
           m_requests.pop ();
+          //========================Handle Group Request =================================
+          if (curSeg.group == 1) //Test
+            {
+              bool bGroupReceived = false;
+
+              if (m_requests.empty ())
+                bGroupReceived = true;
+              else if (m_requests.front ().id > m_recvRequestCounter)
+                bGroupReceived = true;
+
+              //All segment are received at the same time (due to group req)
+              if (bGroupReceived)
+                {
+
+                  if (m_tIndexDownloaded <= curSeg.timeIndex)
+                    m_tIndexDownloaded = curSeg.timeIndex;
+
+                  m_downData.time.at (curSeg.id).downloadEnd = timeNow;
+
+                  for (int vp = 0; vp < m_nViewpoints; vp++)
+                    {
+
+                      g_bufferData[vp].timeNow.push_back (timeNow);
+                      g_bufferData[vp].segmentID.push_back (curSeg.timeIndex);
+
+                      if (curSeg.id == 0)
+                        {
+                          g_bufferData[vp].bufferLevelOld.push_back (0);
+                        }
+                      else
+                        {
+                          g_bufferData[vp].bufferLevelOld.push_back (std::max (
+                              g_bufferData[vp].bufferLevelNew.back () -
+                                  (timeNow - m_downData.time.at (curSeg.id - 1).downloadEnd),
+                              (int64_t) 0));
+                        }
+                      g_bufferData[vp].bufferLevelNew.push_back (
+                          g_bufferData[vp].bufferLevelOld.back () + m_videoData[0].segmentDuration);
+                    }
+
+                  m_reqTrace (this, reqev_endReceiving, m_tIndexDownloaded);
+                  m_ctrlTrace (this, m_state, cteDownloaded, m_tIndexDownloaded);
+                  controllerEvent ev = downloadFinished;
+                  Controller (ev);
+                }
+            }
+          else
+            {
+              if (Req_m_tIndexDownloaded <= curSeg.timeIndex)
+                Req_m_tIndexDownloaded = curSeg.timeIndex;
+
+              m_downData.time.at (curSeg.id).downloadEnd = timeNow;
+              if (Req_m_tIndexReqSent <= curSeg.timeIndex)
+                {
+                  //========================Handle Single Request =================================
+                  if (m_reqType == "single")
+                    {
+                      for (int vp = 0; vp < m_nViewpoints; vp++)
+                        {
+                          g_bufferData[vp].timeNow.push_back (timeNow);
+                          g_bufferData[vp].segmentID.push_back (curSeg.timeIndex);
+
+                          int64_t bufferNew = 0;
+                          int64_t bufferCurrent = 0;
+                          if (curSeg.id != 0)
+                            {
+                              bufferCurrent = std::max (
+                                  g_bufferData[vp].bufferLevelNew.back () -
+                                      (timeNow - m_downData.time.at (curSeg.id - 1).downloadEnd),
+                                  (int64_t) 0);
+                            }
+
+                          if (vp == curSeg.viewpoint)
+                            bufferNew =
+                                bufferCurrent +
+                                m_videoData[0]
+                                    .segmentDuration; //add buffer only for downloaded viewpoint
+
+                          g_bufferData[vp].bufferLevelOld.push_back (bufferCurrent);
+                          g_bufferData[vp].bufferLevelNew.push_back (bufferNew);
+                        }
+                    }
+                  //========================Handle Hybrid Request =================================
+                  else
+                    {
+
+                      //Consume buffer level
+                      for (int vp = 0; vp < m_nViewpoints; vp++)
+                        {
+                          g_bufferData[vp].timeNow.push_back (timeNow);
+                          g_bufferData[vp].bufferLevelOld.push_back (std::max (
+                              g_bufferData[vp].bufferLevelNew.back () -
+                                  (timeNow - m_downData.time.at (curSeg.id - 1).downloadEnd),
+                              (int64_t) 0));
+                          g_bufferData[vp].bufferLevelNew.push_back (
+                              g_bufferData[vp].bufferLevelOld.back ());
+                        }
+
+                      //=====================================
+                      //Temporary buffer for hybrid request to prevent greedy quality selection
+                      //======================================
+
+                      int64_t bufferCurrent;
+                      if (m_downData.group.at (curSeg.id - 1))
+                        { //If prev is group, Based on time available to play the next segment
+                          bufferCurrent =
+                              std::max (m_videoData[0].segmentDuration -
+                                            (timeNow - m_playData.playbackStart.back ()),
+                                        (int64_t) 0);
+                        }
+                      else
+                        { //based on last buffer level
+                          bufferCurrent = std::max (
+                              g_bufferData[curSeg.viewpoint].hybrid_bufferLevelNew.back () -
+                                  (timeNow - m_downData.time.at (curSeg.id - 1).downloadEnd),
+                              (int64_t) 0);
+                        }
+
+                      //buffer handle
+                      g_bufferData[curSeg.viewpoint].hybrid_bufferLevelOld.push_back (
+                          bufferCurrent);
+                      g_bufferData[curSeg.viewpoint].hybrid_bufferLevelNew.push_back (
+                          bufferCurrent + m_videoData[0].segmentDuration);
+
+                      NS_LOG_INFO ("Buffer hybrid"
+                                   << g_bufferData[curSeg.viewpoint].hybrid_bufferLevelNew.back ());
+                      //Redownload handle
+                      m_downSegment.redownload[curSeg.timeIndex] = 1;
+                      m_downSegment.qualityIndex[curSeg.timeIndex][curSeg.viewpoint] =
+                          curSeg.qualityIndex;
+                    }
+                  m_reqTrace (this, reqev_endReceiving, curSeg.timeIndex);
+                  m_ctrlTrace (this, m_state, cteDownloaded, curSeg.timeIndex);
+                  controllerEvent ev = downloadFinished;
+                  Controller (ev);
+                }
+            }
         }
     }
-} // namespace ns3
+}
 
 struct st_mvdashRequest *
 mvdashClient::PrepareRequest (int tIndexReq)
 {
   NS_LOG_FUNCTION (this);
-  struct st_mvdashRequest *pReq;
+  struct st_mvdashRequest *pReq =
+      (struct st_mvdashRequest *) malloc (m_nViewpoints * sizeof (st_mvdashRequest));
+
+  std::vector<int32_t> qIndex (m_nViewpoints, 0);
+
+  int32_t cVP = m_pViewModel->CurrentViewpoint ();
+  int32_t pVP = m_pViewModel->PrevViewpoint ();
+  bool isVpChange = cVP != pVP;
+
   mvdashAlgorithmReply results;
-  pReq = m_pRequestModel->prepareRequest (tIndexReq, m_sendRequestCounter, &results);
+
+  //return qIndex
+  results = m_pAlgorithm->SelectRateIndexes (tIndexReq, m_pViewModel->CurrentViewpoint (), &qIndex,
+                                             true, isVpChange);
   m_delay = results.nextDownloadDelay;
+
+  for (int vp = 0; vp < m_nViewpoints; vp++)
+    {
+      pReq[vp].id = m_sendRequestCounter;
+      pReq[vp].group = 1;
+      pReq[vp].viewpoint = vp;
+      pReq[vp].timeIndex = tIndexReq;
+      pReq[vp].qualityIndex = qIndex[vp];
+      pReq[vp].segmentSize = m_videoData[vp].segmentSize[qIndex[vp]][tIndexReq];
+    }
+
   return pReq;
 }
 
@@ -384,19 +713,139 @@ int
 mvdashClient::SendRequest (struct st_mvdashRequest *pMsg, int nReq)
 {
   NS_LOG_FUNCTION (this);
-  int success;
 
-  success =
-      m_pRequestModel->SendRequest (pMsg, m_socket, m_connected, &m_requests, &m_tIndexReqSent);
-
-  if (success)
+  if (m_connected)
     {
-      // m_txTrace (this, packet);
-      m_sendRequestCounter++;
-      // m_reqTrace (this, reqev_reqMsgSent, m_sendRequestCounter);
-      m_ctrlTrace (this, m_state, cteSendRequest, pMsg->timeIndex);
+
+      Ptr<Packet> packet =
+          Create<Packet> ((uint8_t const *) pMsg, nReq * sizeof (st_mvdashRequest));
+
+      int actual = m_socket->Send (packet);
+
+      if (actual == (int) packet->GetSize ())
+        {
+
+          m_txTrace (this, packet);
+          std::vector<int32_t> qIndexes (m_nViewpoints, -1);
+          for (int i = 0; i < nReq; i++)
+            {
+              m_requests.push (pMsg[i]);
+              qIndexes[pMsg[i].viewpoint] = pMsg[i].qualityIndex;
+            }
+
+          if (m_tIndexReqSent < pMsg[0].timeIndex)
+            m_tIndexReqSent = pMsg[0].timeIndex;
+
+          //LOG Download
+          m_downData.id.push_back (pMsg[0].id);
+          m_downData.playbackIndex.push_back (pMsg[0].timeIndex);
+          struct st_requestTimeInfo tinfo = {Simulator::Now ().GetMicroSeconds (), 0, 0};
+          m_downData.time.push_back (tinfo);
+          m_downData.qualityIndex.push_back (qIndexes);
+          m_downData.group.push_back (1); //set as group request
+          m_downData.viewpointPriority.push_back (m_pViewModel->CurrentViewpoint ());
+
+          //Playback
+          m_downSegment.id.push_back (pMsg[0].timeIndex);
+          m_downSegment.redownload.push_back (0);
+          m_downSegment.qualityIndex.push_back (qIndexes);
+
+          m_reqTrace (this, reqev_reqMsgSent, m_sendRequestCounter++);
+          m_ctrlTrace (this, m_state, cteSendRequest, m_tIndexReqSent);
+          return 1;
+        }
+      else
+        {
+          NS_LOG_DEBUG ("  mvdashClient Unable to send a request packet" << actual);
+        }
     }
-  return success;
+  return 0;
+}
+
+struct st_mvdashRequest *
+mvdashClient::Hybrid_PrepareRequest (int tIndexReq)
+{
+  NS_LOG_FUNCTION (this);
+  int32_t vp = m_pViewModel->CurrentViewpoint ();
+
+  struct st_mvdashRequest *pReq = new st_mvdashRequest;
+
+  std::vector<int32_t> qIndex (m_nViewpoints, -1);
+
+  mvdashAlgorithmReply results = m_pAlgorithm->SelectRateIndexes (
+      tIndexReq, m_pViewModel->CurrentViewpoint (), &qIndex, false, false);
+
+  m_delay = results.nextDownloadDelay;
+  skip_requestSegment = results.skip_requestSegment;
+  tIndexReq = results.nextRepIndex;
+
+  // qIndex[vp]=2;
+  pReq->id = m_sendRequestCounter;
+  pReq->group = 0;
+  pReq->viewpoint = vp;
+  pReq->timeIndex = tIndexReq;
+  pReq->qualityIndex = qIndex[vp];
+
+  pReq->segmentSize = m_videoData[vp].segmentSize[qIndex[vp]][tIndexReq];
+
+  //only for hybrid
+  return pReq;
+}
+
+int
+mvdashClient::Hybrid_SendRequest (struct st_mvdashRequest *pMsg)
+{
+  NS_LOG_FUNCTION (this);
+
+  if (m_connected)
+    {
+      NS_LOG_INFO ("Send SIngle " << g_bufferData[0].segmentID.back ());
+      Ptr<Packet> packet = Create<Packet> ((uint8_t const *) pMsg, sizeof (st_mvdashRequest));
+
+      int actual = m_socket->Send (packet);
+
+      if (actual == (int) packet->GetSize ())
+        {
+          m_txTrace (this, packet);
+          std::vector<int32_t> qIndexes (m_nViewpoints, -1);
+
+          m_requests.push (*pMsg);
+          qIndexes[pMsg->viewpoint] = pMsg->qualityIndex;
+
+          if (Req_m_tIndexReqSent < pMsg->timeIndex)
+            {
+              Req_m_tIndexReqSent = pMsg->timeIndex;
+            }
+
+          m_downData.id.push_back (pMsg->id);
+          m_downData.playbackIndex.push_back (pMsg->timeIndex);
+          struct st_requestTimeInfo tinfo = {Simulator::Now ().GetMicroSeconds (), 0, 0};
+          m_downData.time.push_back (tinfo);
+          m_downData.group.push_back (0); //set as single request
+          m_downData.qualityIndex.push_back (qIndexes);
+          m_downData.viewpointPriority.push_back (m_pViewModel->CurrentViewpoint ());
+
+          if (m_reqType == "single")
+            {
+              //Playback
+              m_downSegment.id.push_back (pMsg[0].timeIndex);
+              m_downSegment.redownload.push_back (0);
+              m_downSegment.qualityIndex.push_back (qIndexes);
+            }
+          m_reqTrace (this, reqev_reqMsgSent, m_sendRequestCounter++);
+          m_ctrlTrace (this, m_state, cteSendRequest, Req_m_tIndexReqSent);
+
+          //stop single request
+          if (pMsg->timeIndex >= m_tIndexDownloaded && m_reqType != "single")
+            Req_single = false;
+          return 1;
+        }
+      else
+        {
+          NS_LOG_DEBUG ("  mvdashClient Unable to send a request packet" << actual);
+        }
+    }
+  return 0;
 }
 
 bool
@@ -417,6 +866,7 @@ mvdashClient::StartPlayback (void)
     {
       if (m_tIndexPlay > 0)
         {
+
           m_pViewModel->UpdateViewpoint (m_tIndexPlay); //change viewpoint each playback
 
           // Single request activated
@@ -425,6 +875,9 @@ mvdashClient::StartPlayback (void)
           //if request is hybrid and change viewpoint,
           if (m_reqType == "hybrid" && cVP != pVP)
             {
+              Req_single = true;
+
+              Req_m_tIndexReqSent = m_tIndexPlay;
               if (m_state == playing)
                 //already download last segment
                 {
@@ -436,8 +889,7 @@ mvdashClient::StartPlayback (void)
 
           if (cVP != pVP)
             {
-              change = "VPChanged " + std::to_string (m_pViewModel->PrevViewpoint ()) + "->" +
-                       std::to_string (m_pViewModel->CurrentViewpoint ());
+              change = "Changed";
             }
         }
 
@@ -447,6 +899,7 @@ mvdashClient::StartPlayback (void)
 
       m_playData.playbackIndex.push_back (m_tIndexPlay);
       m_playData.mainViewpoint.push_back (m_pViewModel->CurrentViewpoint ());
+
       m_playData.playbackStart.push_back (Simulator::Now ().GetMicroSeconds ());
 
       m_playData.qualityIndex.push_back (
@@ -470,6 +923,17 @@ mvdashClient::StartPlayback (void)
       m_ctrlTrace (this, m_state, cteStartPlayback, m_tIndexPlay);
       m_tIndexPlay++;
 
+      // int64_t timeNow = Simulator::Now ().GetMicroSeconds ();
+      // int64_t bufferNow =
+      //     std::max (g_bufferData[m_pViewModel->CurrentViewpoint ()].bufferLevelNew.back () -
+      //                   (timeNow - m_playData.playbackStart.back ()),
+      //               (int64_t) 0);
+      // for (int vp = 0; vp < m_nViewpoints; vp++)
+      //   {
+      //     g_bufferData[vp].all_time.push_back (timeNow);
+      //     g_bufferData[vp].all_buffer.push_back (bufferNow);
+      // }
+
       return true;
     }
 }
@@ -479,8 +943,9 @@ mvdashClient::Initialize (void)
 {
   NS_LOG_FUNCTION (this);
 
+  //ReadInBitrateValues("./contrib/etri_mvdash/multiviewvideo.csv");
   ReadInBitrateValues (m_mvInfoFilePath);
-  read_VMAF (m_mvVmafFilePath);
+  read_VMAF ();
 
   // NS_LOG_ERROR ("Invalid view point switching Model name entered. Terminating" << m_nViewpoints);
 
@@ -489,6 +954,7 @@ mvdashClient::Initialize (void)
     {
       g_bufferData.push_back (bufferData ());
     }
+  // g_bufferData = (m_nViewpoints, bufferData ());
 
   // ===========================================================================================
   // Initialze View-Point Switching Model
@@ -522,9 +988,12 @@ mvdashClient::Initialize (void)
     {
       m_pAlgorithm = new adaptationTobasco (m_videoData, m_playData, g_bufferData, m_downData);
     }
+  else if (m_mvAlgoName == "adaptation_test") // DION
+    {
+      m_pAlgorithm = new adaptationTest (m_videoData, m_playData, g_bufferData, m_downData);
+    }
   else if (m_mvAlgoName == "adaptation_panda") // DION
     {
-
       m_pAlgorithm = new adaptationPanda (m_videoData, m_playData, g_bufferData, m_downData);
     }
   else if (m_mvAlgoName == "adaptation_mpc") // DION
@@ -542,28 +1011,11 @@ mvdashClient::Initialize (void)
       Simulator::Stop ();
     }
 
-  // ================================================================ v===========================
-
+  // ===========================================================================================
   // Initialze Request Model
   if (m_reqType == "single")
     {
-      m_pRequestModel = new requestSingle (m_videoData, m_downData, m_downSegment, m_playData,
-                                           g_bufferData, m_pAlgorithm, m_pViewModel, m_reqType);
-    }
-  else if (m_reqType == "group")
-    {
-      m_pRequestModel = new requestGroupMv (m_videoData, m_downData, m_downSegment, m_playData,
-                                            g_bufferData, m_pAlgorithm, m_pViewModel, m_reqType);
-    }
-  else if (m_reqType == "group_sg")
-    {
-      m_pRequestModel = new requestGroupSg (m_videoData, m_downData, m_downSegment, m_playData,
-                                            g_bufferData, m_pAlgorithm, m_pViewModel, m_reqType);
-    }
-  else if (m_reqType == "hybrid")
-    {
-      m_pRequestModel = new requestHybrid (m_videoData, m_downData, m_downSegment, m_playData,
-                                           g_bufferData, m_pAlgorithm, m_pViewModel, m_reqType);
+      Req_single = true;
     }
 }
 
@@ -633,7 +1085,12 @@ mvdashClient::ReadInBitrateValues (std::string segmentSizeFile)
               nSegments;
           m_videoData[vp].averageBitrate[rindex] =
               8.0 * averageByteSizeTemp / m_videoData[vp].segmentDuration * 1000000;
+          // NS_LOG_INFO ("rates  " << rindex << " " <<  (m_videoData[vp].averageBitrate[rindex]) << " "
+          //                        << m_videoData[vp].segmentSize[rindex][0]);
         }
+      // NS_LOG_INFO ("");
+      // StopApplication ();
+      // Simulator::Stop ();
     }
 
   myfile.close ();
@@ -641,13 +1098,15 @@ mvdashClient::ReadInBitrateValues (std::string segmentSizeFile)
 }
 
 void
-mvdashClient::read_VMAF (std::string segmentVmafFile)
+mvdashClient::read_VMAF ()
 {
   NS_LOG_FUNCTION (this);
-  int nRates = m_videoData[0].averageBitrate.size ();
+  int nRates = 6;
+  // std::vector<std::vector<double>> vmaf_score (nRates);
   //read
   std::ifstream myfile;
-  myfile.open (segmentVmafFile.c_str ());
+  std::string segmentVMAF = "./contrib/etri_mvdash/dataset_vmaf.csv";
+  myfile.open (segmentVMAF.c_str ());
   if (!myfile)
     {
       StopApplication ();
@@ -705,16 +1164,14 @@ mvdashClient::LogDownload (void)
     {
       std::string logStr = std::to_string (m_downData.id[i]);
       logStr.append ("\t" + std::to_string (m_downData.group[i]));
-      logStr.append ("\t" + std::to_string (m_downData.playbackIndex[i][0]));
+      logStr.append ("\t" + std::to_string (m_downData.playbackIndex[i]));
       logStr.append ("\t" + std::to_string (m_downData.viewpointPriority[i]));
       logStr.append ("\t" + std::to_string (m_downData.time[i].requestSent));
       logStr.append ("\t " + std::to_string (m_downData.time[i].downloadStart));
       logStr.append ("\t " + std::to_string (m_downData.time[i].downloadEnd));
 
       for (vp = 0; vp < m_nViewpoints; vp++)
-        {
-          logStr.append ("\t  " + std::to_string (m_downData.qualityIndex[i][vp]));
-        }
+        logStr.append ("\t  " + std::to_string (m_downData.qualityIndex[i][vp]));
 
       downloadLog << logStr << "\n";
     }
@@ -740,8 +1197,6 @@ mvdashClient::LogPlayback (void)
   playbackLog << "Seg\tvp\tStart\tBffer?";
   for (vp = 0; vp < m_nViewpoints; vp++)
     playbackLog << "\tqV" << vp;
-  for (vp = 0; vp < m_nViewpoints; vp++)
-    playbackLog << "\tvV" << vp;
   playbackLog << "\n";
 
   for (int i = 0; i < nPlay; i++)
@@ -752,25 +1207,9 @@ mvdashClient::LogPlayback (void)
       logStr.append ("\t" + std::to_string (m_playData.buffering[i]) + "");
       for (vp = 0; vp < m_nViewpoints; vp++)
         {
-          std::string c;
-          if (m_playData.qualityIndex[i][vp] == -1)
-            c = " ";
-          else
-            c = std::to_string (m_playData.qualityIndex[i][vp]);
-
-          logStr.append ("\t" + c);
-        }
-      //VMAF print
-      for (vp = 0; vp < m_nViewpoints; vp++)
-        {
-          std::string c;
-          if (m_playData.qualityIndex[i][vp] == -1)
-            c = " ";
-          else
-            c = std::to_string (
-                (int32_t) (m_videoData[vp].vmaf[m_playData.qualityIndex[i][vp]][i]));
-
-          logStr.append ("\t" + c);
+          // logStr.append ("\t" + std::to_string (m_playData.qualityIndex[i][vp]));
+          logStr.append ("\t" + std::to_string ((int32_t) (m_videoData[vp].vmaf[m_playData.qualityIndex[i][vp]][i])));
+          // logStr.append (" (" + std::to_string ((int32_t) (m_videoData[vp].vmaf[m_playData.qualityIndex[i][vp]][i])) + ")");
         }
       playbackLog << logStr << "\n";
     }
@@ -786,7 +1225,12 @@ mvdashClient::LogBuffer (void)
                                   "_cl" + std::to_string (m_clientId) + ".csv";
 
   std::ofstream bufferLog;
+  //bufferLog.open("./contrib/etri_mvdash/buffer.csv");
   bufferLog.open (bufferLogFileName.c_str ());
+
+  // CSV Columns
+  // now, bufferOld, bufferNew
+  // bufferLog << "now\tbufferOld\tbufferNew\n";
 
   for (int vp = 0; vp < m_nViewpoints; vp++)
     bufferLog << "\tnow_" << vp + 1 << "\tbufferOld_" << vp + 1 << "\tbufferNew_" << vp + 1;
@@ -812,6 +1256,9 @@ mvdashClient::LogBuffer (void)
           else
             {
               isEmpty[v] = 1;
+              // logStr.append ("\t");
+              // logStr.append ("\t");
+              // logStr.append ("\t");
             }
         }
 

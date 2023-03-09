@@ -16,34 +16,38 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef MVDASH_ADAPTATION_ALGORITHM
-#define MVDASH_ADAPTATION_ALGORITHM
+#ifndef MAXIMIZE_CURRENT_ADAPTATION
+#define MAXIMIZE_CURRENT_ADAPTATION
 
-#include "ns3/application.h"
-#include "ns3/mvdash.h"
+#include "ns3/mvdash_adaptation_algorithm.h"
 
 namespace ns3 {
 
-class mvdashAdaptationAlgorithm : public Object
+class maximizeCurrentAdaptation : public mvdashAdaptationAlgorithm
 {
 public:
-  mvdashAdaptationAlgorithm (const t_videoDataGroup &videoData,
+  maximizeCurrentAdaptation (const t_videoDataGroup &videoData,
                              const struct playbackDataGroup &playData,
                              const bufferDataGroup &bufferData,
                              const struct downloadData &downData);
 
   //isGroup : Request -> group true, single false
   //isVpChange : Viewpoint change true/false
-  virtual mvdashAlgorithmReply SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
-                                                  std::vector<int32_t> *pIndexes, bool isGroup,
-                                                  std::string m_reqType) = 0;
+  mvdashAlgorithmReply SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
+                                          std::vector<int32_t> *pIndexes, bool isGroup,
+                                          std::string m_reqType);
 
 protected:
-  const t_videoDataGroup &m_videoData;
-  const struct playbackDataGroup &m_playData;
-  const bufferDataGroup &m_bufferData;
-  const struct downloadData &m_downData;
+private:
+  int32_t m_nViewpoints;
+  int64_t m_bHigh; //max buffer
+  int64_t m_bLow; //max buffer
+
+  int64_t dataSize_last (int32_t idLast, std::vector<int32_t> *pIndexes, int prevViewpoint);
+  int64_t dataSize_predict (bool isGroup, int segmentID, std::vector<int32_t> *pIndexes,
+                            int curViewpoint, std::string m_reqType);
 };
+
 } // namespace ns3
 
-#endif /* MVDASH_ADAPTATION_ALGORITHM */
+#endif /* MAXIMIZE_CURRENT_ADAPTATION */

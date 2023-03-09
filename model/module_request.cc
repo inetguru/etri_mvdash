@@ -16,30 +16,26 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef MAXIMIZE_CURRENT_ADAPTATION_H
-#define MAXIMIZE_CURRENT_ADAPTATION_H
-
-#include "mvdash_adaptation_algorithm.h"
+#include "module_request.h"
 
 namespace ns3 {
 
-class maximizeCurrentAdaptation : public mvdashAdaptationAlgorithm
+NS_LOG_COMPONENT_DEFINE ("moduleRequest");
+
+NS_OBJECT_ENSURE_REGISTERED (moduleRequest);
+
+moduleRequest::moduleRequest (const t_videoDataGroup &videoData, downloadData &downData,
+                              downloadedSegment &downSegment, playbackDataGroup &playData,bufferDataGroup &bufferData,
+                              mvdashAdaptationAlgorithm *pAlgorithm, MultiView_Model *pViewModel,std::string reqType)
+    : m_videoData (videoData),
+      m_downData (downData),
+      m_downSegment (downSegment),
+      g_bufferData(bufferData),
+      m_playData (playData),
+      m_pAlgorithm (pAlgorithm),
+      m_pViewModel (pViewModel),
+      m_reqType(reqType)
 {
-public:
-  maximizeCurrentAdaptation ( const t_videoDataGroup &videoData,
-                        const struct playbackDataGroup & playData,
-                        const bufferDataGroup & bufferData,
-                        const struct downloadData & downData  );
-
-  //isGroup : Request -> group true, single false
-  //isVpChange : Viewpoint change true/false 
-  mvdashAlgorithmReply SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint, std::vector <int32_t> *pIndexes, bool isGroup, bool isVpChange);
-
-protected:
-private :
-  int32_t m_nViewpoints;
-};
+}
 
 } // namespace ns3
-
-#endif /* MAXIMIZE_CURRENT_ADAPTATION_H */

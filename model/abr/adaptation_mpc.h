@@ -19,9 +19,9 @@
 #ifndef ADAPTATION_MPC_H
 #define ADAPTATION_MPC_H
 
-#include "mvdash_adaptation_algorithm.h" // dion
+#include "ns3/mvdash_adaptation_algorithm.h" // dion
 #include <queue>
-#include <math.h>       /* log2 */
+#include <math.h> /* log2 */
 
 namespace ns3 {
 
@@ -35,7 +35,7 @@ public:
   //isVpChange : Viewpoint change true/false
   mvdashAlgorithmReply SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
                                           std::vector<int32_t> *pIndexes, bool isGroup,
-                                          bool isVpChange);
+                                          std::string m_reqType);
 
 protected:
 private:
@@ -45,6 +45,7 @@ private:
   int s_len; //how many frames in past
   int a_dim; //dimention of available bitrate
   int mpc_future_count; //future prediction
+  int QoeLog; //Linear or log
   int64_t m_bHigh; //max buffer
 
   std::vector<double> past_bandwidht;
@@ -65,9 +66,10 @@ private:
    * 
    * @return int64_t 
    */
-  int64_t predict_ChunkSize (bool isGroup, int segmentID, int chunk_quality, int m_nViewpoints,
-                             int curViewpoint);
-  
+  int64_t predict_ChunkSize (bool isGroup, int segmentID, int chunk_quality,
+                                  std::vector<int32_t> *pIndexes, int curViewpoint,
+                                  std::string m_reqType);
+
   /**
    * @brief Get the Chunk Size between group or single request
    * 
@@ -78,10 +80,9 @@ private:
    * @param curViewpoint 
    * @return int64_t 
    */
-  int64_t
-  past_ChunkSize (bool isGroup, int idLast, int segmentLast, int m_nViewpoints, int curViewpoint);
+  int64_t past_ChunkSize (int idLast, std::vector<int32_t> *pIndexes, int prev_mainView);
 
-  double QOELog(int64_t bitrate_now, int Viewpoint);
+  double QOELog (int64_t bitrate_now, int Viewpoint);
 };
 
 } // namespace ns3

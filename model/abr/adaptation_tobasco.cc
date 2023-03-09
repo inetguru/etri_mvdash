@@ -51,13 +51,9 @@ adaptationTobasco::adaptationTobasco (const t_videoDataGroup &videoData,
 
 mvdashAlgorithmReply
 adaptationTobasco::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
-                                      std::vector<int32_t> *pIndexes, bool isGroup, bool isVpChange)
+                                      std::vector<int32_t> *pIndexes, bool isGroup,
+                                      std::string m_reqType)
 {
-
-  if (isVpChange)
-    {
-      m_runningFastStart = true;
-    }
 
   int64_t decisionCase = 0;
   int64_t delayDecision = 0;
@@ -72,20 +68,22 @@ adaptationTobasco::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
 
   if (tIndexReq > 0)
     {
-      // NS_LOG_INFO (" - " << m_videoData[curViewpoint].averageBitrate.at (
-      //                  m_downData.qualityIndex[tIndexReq - 1].at (curViewpoint))*m_videoData[0].segmentDuration/(m_downData.time[tIndexReq - 1].downloadEnd -
-      //                        m_downData.time[tIndexReq - 1].requestSent)/1e6);
+      int32_t idLast = m_downData.id.back (); //last INDEX of download data
+
+      int prevViewpoint = m_downData.viewpointPriority.at (idLast); //prev VP
+
+      if (prevViewpoint != curViewpoint)
+        {
+          m_runningFastStart = true;
+        }
 
       nextRepIndex = m_lastRepIndex;
-    
 
       bufferNow = m_bufferData[curViewpoint].bufferLevelNew.back () -
                   (timeNow - m_bufferData[curViewpoint].timeNow.back ());
 
       double averageSegmentThroughput =
           AverageSegmentThroughput (curViewpoint, timeNow - m_deltaTime, timeNow);
-  NS_LOG_INFO ("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! "
-                   << averageSegmentThroughput);
       double nextHighestRepBitrate;
 
       if (m_lastRepIndex < m_highestRepIndex)
@@ -99,17 +97,12 @@ adaptationTobasco::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
               (m_videoData[curViewpoint].averageBitrate.at (m_lastRepIndex)) / timeFactor;
         }
 
-      // bool lasthigh=m_lastRepIndex != m_highestRepIndex;
-      // NS_LOG_INFO ("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! " << m_runningFastStart
-      //                                                                  << " - " << lasthigh << " - "<< MinimumBufferLevelObserved ());
       //fast start?
       if (m_runningFastStart && m_lastRepIndex != m_highestRepIndex &&
           MinimumBufferLevelObserved () &&
           ((m_videoData[curViewpoint].averageBitrate.at (m_lastRepIndex)) / timeFactor <=
            m_a1 * averageSegmentThroughput))
         {
-          NS_LOG_INFO ("^^^^^^^^^^^^^^^^^^^ " << averageSegmentThroughput << " - "
-                                              << nextHighestRepBitrate);
 
           /* --------- running fast start phase --------- */
           if (bufferNow < m_bMin)
@@ -229,23 +222,19 @@ adaptationTobasco::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
     }
 
   m_lastRepIndex = nextRepIndex;
-  mvdashAlgorithmReply results;
-  results.decisionCase = decisionCase;
-  results.nextDownloadDelay = bDelay;
 
   //   Set all view with rate index 0, except the current view
   int vp;
-
   for (vp = 0; vp < m_nViewpoints; vp++)
     if (vp != curViewpoint)
       (*pIndexes)[vp] = 0;
 
   (*pIndexes)[curViewpoint] = nextRepIndex;
-
-  // NS_LOG_INFO ("Run Simulation."
-  //              << " - " << nextRepIndex << " - " << decisionCase << " - " << delayDecision << " "
-  //              << bDelay);
-
+  mvdashAlgorithmReply results;
+  results.decisionCase = decisionCase;
+  results.nextDownloadDelay = bDelay;
+  results.nextRepIndex = tIndexReq;
+  results.rate_group = *pIndexes;
   return results;
 }
 

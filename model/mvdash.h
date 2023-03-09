@@ -70,6 +70,7 @@ struct mvdashAlgorithmReply
   int64_t
       delayDecisionCase; //!< indicate in which part of the adaptation algorithm's code the decision was made, how much time in microsends to wait until the segment shall be requested from server, only for logging purposes
   int skip_requestSegment; //skip download current segment (used by single request)
+  std::vector<int32_t> rate_group; //get quality of n request
 };
 
 struct videoData
@@ -78,7 +79,7 @@ struct videoData
       segmentSize; //!< vector holding representation levels in the first dimension and their particular segment sizes in bytes in the second dimension
   std::vector<double>
       averageBitrate; //!< holding the average bitrate of a segment in representation i in bits
-  std::vector<double> vmaf; //!<hold vmaf score
+  std::vector<std::vector<double>> vmaf; //!<hold vmaf score
   int64_t segmentDuration; //!< duration of a segment in microseconds
 };
 
@@ -108,7 +109,7 @@ struct st_requestTimeInfo
 struct downloadData
 {
   std::vector<int32_t> id; //download id
-  std::vector<int32_t> playbackIndex; //!< Index of the video segment, should be the primary key
+  std::vector<std::vector<int32_t>> playbackIndex; //!< Index of the video segment, should be the primary key
   std::vector<struct st_requestTimeInfo> time;
   std::vector<std::vector<int32_t>> qualityIndex;
   std::vector<int32_t> group; // REQUEST : Group = 1 ,else 0

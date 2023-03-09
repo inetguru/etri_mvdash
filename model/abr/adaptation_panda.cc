@@ -46,9 +46,9 @@ adaptationPanda::adaptationPanda (const t_videoDataGroup &videoData,
 
 mvdashAlgorithmReply
 adaptationPanda::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
-                                    std::vector<int32_t> *pIndexes, bool isGroup, bool isVpChange)
+                                    std::vector<int32_t> *pIndexes, bool isGroup,
+                                    std::string m_reqType)
 {
-
   const int64_t timeNow = Simulator::Now ().GetMicroSeconds ();
   int64_t delay = 0;
   if (tIndexReq == 0)
@@ -68,6 +68,7 @@ adaptationPanda::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
       answer.decisionTime = timeNow;
       answer.decisionCase = 0;
       answer.delayDecisionCase = 0;
+      answer.rate_group=*pIndexes;
 
       return answer;
     }
@@ -84,8 +85,9 @@ adaptationPanda::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
             m_videoData[vp1].averageBitrate.at (m_downData.qualityIndex[prevIndex].at (vp1));
     }
 
-  previousRate= previousRate/(m_nViewpoints-1)+m_videoData[curViewpoint].averageBitrate.at (m_downData.qualityIndex[prevIndex].at (curViewpoint));
-
+  previousRate = previousRate / (m_nViewpoints - 1) +
+                 m_videoData[curViewpoint].averageBitrate.at (
+                     m_downData.qualityIndex[prevIndex].at (curViewpoint));
 
   // estimate the bandwidth share
   double throughputMeasured =
@@ -233,13 +235,9 @@ adaptationPanda::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
 
   m_lastTargetInterrequestTime = targetInterrequestTime;
 
-  m_lastBuffer =
-      (m_bufferData[curViewpoint].bufferLevelNew.back () - (timeNow - m_downData.time.back ().downloadEnd)) / 1e6;
-
-  mvdashAlgorithmReply results;
-  results.nextRepIndex = videoIndex;
-  results.decisionCase = 0;
-  results.nextDownloadDelay = delay;
+  m_lastBuffer = (m_bufferData[curViewpoint].bufferLevelNew.back () -
+                  (timeNow - m_downData.time.back ().downloadEnd)) /
+                 1e6;
 
   //   Set all view with rate index 0, except the current view
   int vp;
@@ -249,6 +247,12 @@ adaptationPanda::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
       (*pIndexes)[vp] = 0;
 
   (*pIndexes)[curViewpoint] = videoIndex;
+
+  mvdashAlgorithmReply results;
+  results.nextRepIndex = videoIndex;
+  results.decisionCase = 0;
+  results.nextDownloadDelay = delay;
+  results.rate_group = *pIndexes;
 
   return results;
 }
@@ -263,6 +267,7 @@ adaptationPanda::FindLargest (const double smoothBandwidthShare, const int32_t c
   //Other vp set as 0 quality
   int vp;
   int otherRate = 0;
+
   for (vp = 0; vp < m_nViewpoints; vp++)
     {
       if (vp != curViewpoint)

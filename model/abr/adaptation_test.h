@@ -16,10 +16,10 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef ADAPTATION_TEST_H
-#define ADAPTATION_TEST_H
+#ifndef ADAPTATION_TEST
+#define ADAPTATION_TEST
 
-#include "mvdash_adaptation_algorithm.h" // dion
+#include "ns3/mvdash_adaptation_algorithm.h" // dion
 
 namespace ns3 {
 
@@ -33,16 +33,20 @@ public:
   //isVpChange : Viewpoint change true/false
   mvdashAlgorithmReply SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
                                           std::vector<int32_t> *pIndexes, bool isGroup,
-                                          bool isVpChange);
+                                          std::string m_reqType);
 
 protected:
 private:
   int32_t m_nViewpoints;
   int64_t m_bHigh; //max buffer
   int64_t m_bLow; //max buffer
-  int32_t Req_HybridSegmentSelection (int32_t curViewpoint, int32_t Req_m_tIndexReqSent);
+
+  // int64_t dataSize (int32_t idLast, std::vector<int32_t> *pIndexes, int prevViewpoint);
+  int64_t dataSize_last (int32_t idLast, std::vector<int32_t> *pIndexes, int prevViewpoint);
+  int64_t dataSize_predict (bool isGroup, int segmentID, std::vector<int32_t> *pIndexes,
+                            int curViewpoint, std::string m_reqType);
 };
 
 } // namespace ns3
 
-#endif /* ADAPTATION_TEST_H */
+#endif /* ADAPTATION_TEST */

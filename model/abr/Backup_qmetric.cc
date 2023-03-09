@@ -15,12 +15,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-#include <ns3/core-module.h>
 #include "adaptation_qmetric.h" // dion
-#include <numeric>
-#include <cstdlib>
-#include <vector>
-#include <cmath>
 
 namespace ns3 {
 
@@ -44,73 +39,74 @@ adaptationQmetric::adaptationQmetric (const t_videoDataGroup &videoData,
   m_bHigh = 600000000000; //5 seconds -------------------------------------------------
   a_dim = videoData[0].segmentSize.size (); // repesentation count
   mpc_future_count = 1;
+  Qtarget = 90;
 }
 
 mvdashAlgorithmReply
 adaptationQmetric::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
-                                      std::vector<int32_t> *pIndexes, bool isGroup, bool isVpChange)
+                                      std::vector<int32_t> *pIndexes, bool isGroup,
+                                      std::string m_reqType)
 {
 
-  int vp;
-  int video_chunk_total = m_videoData[0].segmentSize[0].size () - 1;
-  const int64_t timeNow = Simulator::Now ().GetMicroSeconds ();
   int64_t delay = 0;
   int skip_requestSegment = 0;
   int64_t down_predict = 0;
-
   int qIndexForCurView = 0;
-
-  //Group : set other vp to 0, single : set other -1
-  for (vp = 0; vp < m_nViewpoints; vp++)
-    {
-      if (isGroup)
-        (*pIndexes)[vp] = 0;
-      else
-        (*pIndexes)[vp] = -1;
-    }
+  std::vector<std::vector<int>> bestCombo (m_nViewpoints,
+                                           std::vector<int> (s_len, 0)); //get best combinations
 
   if (tIndexReq > 0)
     {
+      const int64_t timeNow = Simulator::Now ().GetMicroSeconds ();
+
       //video data
-      int64_t idLast = m_downData.id.back (); //last index of downloaded data
-      int32_t segmentLast = m_downData.playbackIndex[idLast]; //chunk ID of the last downloaded data
+      int video_chunk_total = m_videoData[0].segmentSize[0].size () - 1;
       int video_chunk_remain = video_chunk_total - tIndexReq;
-      bool prev_single = (m_downData.group[idLast] == 0); //Previous is Group or single download
+      int64_t idLast = m_downData.id.back (); //last index of downloaded data
       int prev_mainView = m_downData.viewpointPriority[idLast];
+      int32_t segmentLast =
+          m_downData.playbackIndex[idLast][prev_mainView]; //chunk ID of the last downloaded data
 
       int64_t start_buffer = m_bufferData[curViewpoint].bufferLevelNew.back () -
-                             (timeNow - m_downData.time.back ().downloadEnd); // buffer level
-
-      //the first request after VP change should be finished before the playback end (1 segment duration)
-      if (!isGroup)
-        {
-          int32_t skipCount = tIndexReq - m_playData.playbackIndex.back ();
-          if (prev_mainView != curViewpoint)
-            {
-
-              start_buffer = ((skipCount) *m_videoData[0].segmentDuration) -
-                             (timeNow - m_playData.playbackStart.back ());
-              NS_LOG_INFO ("---------buffer start from 2s " << start_buffer);
-            }
-          else
-            {
-              start_buffer = m_bufferData[curViewpoint].hybrid_bufferLevelNew.back () -
                              (timeNow - m_downData.time.back ().downloadEnd);
-              NS_LOG_INFO ("---------buffer continue from s "
-                           << start_buffer << " "
-                           << m_bufferData[curViewpoint].bufferLevelNew.back () -
-                                  (timeNow - m_downData.time.back ().downloadEnd));
-            }
-        }
+      // //the first request after VP change should be finished before the playback end (1 segment duration)
+      // if (!isGroup)
+      //   {
+      //     int32_t skipCount = tIndexReq - m_playData.playbackIndex.back ();
+      //     if (prev_mainView != curViewpoint)
+      //       {
+
+      //         start_buffer = ((skipCount) *m_videoData[0].segmentDuration) -
+      //                        (timeNow - m_playData.playbackStart.back ());
+      //         NS_LOG_INFO ("---------buffer start from 2s " << start_buffer);
+      //       }
+      //     else
+      //       {
+      //         start_buffer = m_bufferData[curViewpoint].hybrid_bufferLevelNew.back () -
+      //                        (timeNow - m_downData.time.back ().downloadEnd);
+      //         NS_LOG_INFO ("---------buffer continue from s "
+      //                      << start_buffer << " "
+      //                      << m_bufferData[curViewpoint].bufferLevelNew.back () -
+      //                             (timeNow - m_downData.time.back ().downloadEnd));
+      //       }
+      //   }
 
       //bitrate
-      int32_t bitrate_previous = m_downData.qualityIndex[idLast][prev_mainView];
+      int32_t bitrate_previous;
+      if (m_reqType == "group_sg")
+        bitrate_previous = m_downData.qualityIndex[idLast][((int) pIndexes->size ()) - 1];
+      else
+        bitrate_previous = m_downData.qualityIndex[idLast][prev_mainView];
+
+      if (bitrate_previous == -1)
+        bitrate_previous = m_downData.qualityIndex[idLast][curViewpoint]; // or 0?
+
       //downloadtime caluculation
       int32_t idTimeLast = m_downData.time.size () - 1; //last time index of download data
       int64_t tDelay = m_downData.time[idTimeLast].downloadEnd -
                        m_downData.time[idTimeLast].requestSent; //in ms of download time
 
-      //-------------Bandwidth calculation------------------
+      //-------------Bandwidth calculation-----------------------------------------------------
       //keep n past information only
       if ((int) past_errors.size () >= s_len)
         past_errors.erase (past_errors.begin ());
@@ -118,17 +114,14 @@ adaptationQmetric::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
         past_bandwidht.erase (past_bandwidht.begin ());
 
       //calculate past bandwidht in single or group request
-      double bw_prev =
-          past_ChunkSize (!prev_single, idLast, segmentLast, m_nViewpoints, prev_mainView);
+      double bw_prev = past_ChunkSize (idLast, pIndexes, prev_mainView);
       bw_prev = bw_prev * m_videoData[0].segmentDuration / tDelay;
       past_bandwidht.push_back (bw_prev);
 
-      //calculate eerror prediction : previous used BW vs actual BW
+      //calculate error prediction : previous used BW vs actual BW
       double curr_error = 0; // we cannot predict the initial request
       if (past_bandwidth_ests.size () > 0)
-        {
-          curr_error = std::abs (past_bandwidth_ests.back () - bw_prev) / bw_prev;
-        }
+        curr_error = std::abs (past_bandwidth_ests.back () - bw_prev) / bw_prev;
       past_errors.push_back (curr_error);
 
       //Calculate BW prediction
@@ -142,15 +135,14 @@ adaptationQmetric::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
       for (auto &p : past_errors)
         bw_error = std::max (bw_error, p);
 
-      double bw_future =
-          harmonic_bandwidth / (1.0 + bw_error); //--> robust MPC --------------------------------
+      double bw_future = harmonic_bandwidth / (1.0 + bw_error); //--> robust MPC
       bw_future = past_bandwidht.back (); //--> use previous BW
       past_bandwidth_ests.push_back (bw_future);
 
       //-----------------------
       // NS_LOG_INFO ("Pas e " << past_errors.size () << " Past BW " << past_bandwidht.size ()
       //                       << " Past Esti " << past_bandwidth_ests.size ());
-      std::string logStr;
+      // std::string logStr;
       // for (auto &e : past_errors)
       //   {
       //     logStr.append (std::to_string (e) + " ");
@@ -168,6 +160,7 @@ adaptationQmetric::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
       //     logStr.append (std::to_string (e) + " ");
       //   }
       // NS_LOG_INFO (logStr);
+      // ------------------------------------------------------------------------------------
 
       //future chunks length
       int last_index = (int) (video_chunk_total - video_chunk_remain);
@@ -178,85 +171,83 @@ adaptationQmetric::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
         } //make sure the maximum is 5
 
       // --------------START MPC---------------
-
       //Combo options
       std::vector<std::vector<int>> CHUNK_COMBO_OPTIONS = combinatorial (a_dim, mpc_future_count);
-      // NS_LOG_INFO (CHUNK_COMBO_OPTIONS.size () << " ------------------------------------");
-      double reward = 0; //get
-      double max_reward = 9 * 1e16;
-      // int max_reward = -999999999;
-      std::vector<int> bestCombo; //get best combinations
+      std::vector<std::vector<int>> CHUNK_COMBO_VP = combinatorial (a_dim, m_nViewpoints);
+      
+
+      double reward = 0;
+      double max_reward = 9 * 1e20; //Minimization
       //iterate through each combination
-      NS_LOG_INFO ("---------------------------------------------- : "
-                   << tIndexReq << " " << prev_mainView << " " << segmentLast << " - "
-                   << m_videoData[prev_mainView].vmaf[bitrate_previous][segmentLast]);
+         NS_LOG_INFO ("------------------------------------------------!" << CHUNK_COMBO_OPTIONS.size());
+
       for (auto &combo : CHUNK_COMBO_OPTIONS)
         {
-          double curr_buffer = (double) start_buffer;
+          double bitrate_last = bitrate_previous; //last downloaded chunk quality
+          double curr_buffer = start_buffer;
           double curr_rebuffer_time = 0;
-          double bitrate_sum = 0.0;
-          double smooth_diff = 0.0;
-          int64_t bitrate_last = bitrate_previous; //last downloaded chunk quality
+          double bitrate_sum = 0;
+          double smooth_diff = 0;
+          // int last_VP = prev_mainView;
+          // NS_LOG_INFO(segmentLast << " " << prev_mainView << " "<<bitrate_last);
           double vmaf_last = m_videoData[prev_mainView].vmaf[bitrate_last][segmentLast];
           double vmaf_score, rate = 0;
-          double Qtarget = 80;
           // iterate through quality combination for each future chunk
+
           for (auto pos = 0; pos < future_chunk_length; pos++)
             {
               auto chunk_quality = combo[pos];
               auto index = tIndexReq + pos; //iterate through next chunk
 
               //calculate donwload time for single/group download
-              int64_t chunk_size =
-                  predict_ChunkSize (isGroup, index, chunk_quality, m_nViewpoints, curViewpoint);
-              int64_t download_time = (chunk_size * m_videoData[0].segmentDuration) / bw_future;
-              // NS_LOG_INFO("----------------"<<chunk_quality<< " - "<<chunk_size << " " << download_time << " - " << curr_buffer);
+              double chunk_size = predict_ChunkSize (isGroup, index, chunk_quality, pIndexes,
+                                                     curViewpoint, m_reqType);
 
-              // Buffer control
+              double download_time = (chunk_size * m_videoData[0].segmentDuration) / bw_future;
+
+              // NS_LOG_INFO("----------------"<<chunk_quality<< " - "<<chunk_size << " " << download_time << " - " << curr_buffer);
               if (curr_buffer < download_time)
                 {
                   curr_rebuffer_time += (download_time - curr_buffer);
-                  curr_buffer = 0; //reset buffer
+                  curr_buffer = 0;
                 }
               else
                 {
                   curr_buffer -= download_time;
                 }
+
               curr_buffer += m_videoData[0].segmentDuration;
+              // curr_buffer += std::pow (m_videoData[0].segmentDuration, 2);
 
               //rate = Qt - Q(l)
               vmaf_score = m_videoData[curViewpoint].vmaf[chunk_quality][index];
-              vmaf_last = vmaf_score;
               rate = Qtarget - vmaf_score;
-              bitrate_sum += rate;
+              // bitrate_sum += std::pow (rate, 2);
+              bitrate_sum += std::abs( rate);
 
               //Variation
-              smooth_diff += std::abs (std::max (vmaf_score - vmaf_last, 0.0));
+              // smooth_diff += std::pow (std::abs(std::max (vmaf_score - vmaf_last, 0.0)),2);
+              smooth_diff += std::abs(std::max (vmaf_score - vmaf_last, 0.0));
+              vmaf_last = vmaf_score;
             }
 
-          // reward = std::pow((80-(b(itrate_sum)),2) + std::pow((curr_rebuffer_time),2) + std::pow((smooth_diff),2);
-          // reward = (80-(bitrate_sum)) + (curr_rebuffer_time) + (smooth_diff);
-          reward = std::pow(bitrate_sum,2) + std::pow(curr_rebuffer_time,2) + std::pow(smooth_diff,2);
-          // reward = (bitrate_sum) + (curr_rebuffer_time) + (smooth_diff);
+          // reward = bitrate_sum + smooth_diff + curr_buffer;
+          reward = std::pow (bitrate_sum, 2) + std::pow (curr_rebuffer_time, 2) +
+                   std::pow (smooth_diff, 2);
 
           //save best reward
           if (reward < max_reward)
             {
-              NS_LOG_INFO (tIndexReq << " : Reward [Rw, R, V, B] [" << reward << "," << bitrate_sum << ","
-                                     << bitrate_sum << "," << curr_rebuffer_time << "] Combo ["<< combo[0] << "," << combo[1] << "," << combo[2] << ","
-                                     << combo[3] << "," << combo[4] << "] V[last, Now] [" << vmaf_last
-                                     << "," << vmaf_score << "]");
-
               max_reward = reward;
-              bestCombo = combo;
+              bestCombo[curViewpoint] = combo;
             }
         }
 
-      qIndexForCurView = bestCombo[0];
+      qIndexForCurView = bestCombo[curViewpoint][0];
 
       //Calculate delay to avoid buffer overflow
-      int64_t chunk_size =
-          predict_ChunkSize (isGroup, tIndexReq, bestCombo[0], m_nViewpoints, curViewpoint);
+      int64_t chunk_size = predict_ChunkSize (isGroup, tIndexReq, bestCombo[curViewpoint][0],
+                                              pIndexes, curViewpoint, m_reqType);
       down_predict = chunk_size * m_videoData[0].segmentDuration / bw_future;
       int64_t Bf_predict = start_buffer - down_predict + m_videoData[curViewpoint].segmentDuration;
       if (start_buffer > m_bHigh)
@@ -264,8 +255,8 @@ adaptationQmetric::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
           delay = Bf_predict - m_bHigh;
         }
 
-      NS_LOG_INFO (" Optimum " << bestCombo[0] << " -R- " << reward << " combo " << bestCombo[0]
-                               << bestCombo[1] << bestCombo[2] << bestCombo[3] << bestCombo[4]);
+      // NS_LOG_INFO (" Optimum " << bestCombo[0] << " -R- " << reward << " combo " << bestCombo[0]
+      //                          << bestCombo[1] << bestCombo[2] << bestCombo[3] << bestCombo[4]);
 
       //skip segment request
       if (!isGroup)
@@ -276,12 +267,23 @@ adaptationQmetric::SelectRateIndexes (int32_t tIndexReq, int32_t curViewpoint,
         }
     }
 
-  (*pIndexes)[curViewpoint] = qIndexForCurView;
+  if (m_reqType == "group_sg")
+    {
+      for (int i = 0; i < (int) pIndexes->size (); i++)
+        {
+          (*pIndexes)[i] = bestCombo[curViewpoint][i];
+        }
+    }
+  else
+    {
+      (*pIndexes)[curViewpoint] = bestCombo[curViewpoint][0];
+    }
 
   mvdashAlgorithmReply results;
   results.nextDownloadDelay = delay;
   results.nextRepIndex = tIndexReq;
   results.skip_requestSegment = skip_requestSegment;
+  results.rate_group = *pIndexes;
 
   return results;
 }
@@ -306,84 +308,59 @@ adaptationQmetric::combinatorial (int a_dim, int mpc_future_count)
 }
 
 int64_t
-adaptationQmetric::past_ChunkSize (bool isGroup, int idLast, int segmentLast, int m_nViewpoints,
-                                   int prev_mainView)
+adaptationQmetric::past_ChunkSize (int idLast, std::vector<int32_t> *pIndexes, int prev_mainView)
 {
   int64_t chunk_size = 0;
+  bool prev_single = (m_downData.group[idLast] == 0); //Previous is Group or single download
 
-  if (isGroup)
+  if (prev_single)
     {
-      //calculate all viewpoint
-      for (int vp = 0; vp < m_nViewpoints; vp++)
-        {
-          int q = m_downData.qualityIndex[idLast][vp];
-          chunk_size += m_videoData[vp].segmentSize[q][segmentLast];
-        }
+      int32_t segment = m_downData.playbackIndex[idLast][0];
+      int q = m_downData.qualityIndex[idLast][prev_mainView];
+      chunk_size += m_videoData[prev_mainView].segmentSize[q][segment];
     }
   else
     {
-      //only mainview
-      int q = m_downData.qualityIndex[idLast][prev_mainView];
-      chunk_size = m_videoData[prev_mainView].segmentSize[q][segmentLast];
+
+      for (int i = 0; i < (int) pIndexes->size (); i++)
+        {
+          int32_t segment = m_downData.playbackIndex[idLast][i]; //last index of segment
+          int q = m_downData.qualityIndex[idLast][i];
+          chunk_size += m_videoData[prev_mainView].segmentSize[q][segment];
+        }
     }
   return chunk_size;
 }
 
 int64_t
 adaptationQmetric::predict_ChunkSize (bool isGroup, int segmentID, int chunk_quality,
-                                      int m_nViewpoints, int curViewpoint)
+                                      std::vector<int32_t> *pIndexes, int curViewpoint,
+                                      std::string m_reqType)
 {
   int64_t chunk_size = 0;
   if (isGroup)
     {
-      //calculate multiple view, set other to lowest quality
-      for (int vp = 0; vp < m_nViewpoints; vp++)
+      if (m_reqType == "group")
         {
-          if (vp != curViewpoint)
-            chunk_size += m_videoData[vp].segmentSize[0][segmentID];
-          else
-            chunk_size += m_videoData[vp].segmentSize[chunk_quality][segmentID];
+          //calculate multiple view, set other to lowest quality
+          for (int vp = 0; vp < (int) pIndexes->size (); vp++)
+            {
+              if (vp != curViewpoint)
+                chunk_size += m_videoData[vp].segmentSize[0][segmentID];
+            }
+          chunk_size += m_videoData[curViewpoint].segmentSize[chunk_quality][segmentID];
+        }
+      else if (m_reqType == "group_sg")
+        {
+
+          chunk_size += m_videoData[curViewpoint].segmentSize[chunk_quality][segmentID];
         }
     }
   else
     {
-      chunk_size = m_videoData[curViewpoint].segmentSize[chunk_quality][segmentID];
+      chunk_size += m_videoData[curViewpoint].segmentSize[chunk_quality][segmentID];
     }
+
   return chunk_size;
 }
-
-// void
-// adaptationMpc::read_VMAF ()
-// {
-//   NS_LOG_FUNCTION (this);
-//   int nRates = 6;
-//   std::vector<std::vector<double>> vmaf_score (nRates);
-//   //read
-//   std::ifstream myfile;
-//   std::string segmentVMAF = "./contrib/etri_mvdash/multiviewvideo_vmaf.csv";
-//   myfile.open (segmentVMAF.c_str ());
-//   if (!myfile)
-//     {
-//       NS_LOG_INFO ("File error");
-//     }
-//   else
-//     {
-
-//       std::string temp;
-//       while (std::getline (myfile, temp))
-//         {
-//           std::istringstream buffer (temp);
-//           std::vector<double> line ((std::istream_iterator<double> (buffer)),
-//                                     std::istream_iterator<double> ());
-
-//           int i = 0;
-//           for (int rindex = 0; rindex < nRates; rindex++)
-//             {
-//               vmaf_score[rindex].push_back (line[i++]);
-//             }
-//         }
-//     }
-//   myfile.close ();
-// }
-
 } // namespace ns3

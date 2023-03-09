@@ -16,8 +16,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef MVDASH_CLIENT_H
-#define MVDASH_CLIENT_H
+#ifndef MVDASH_CLIENT
+#define MVDASH_CLIENT
 
 #include "ns3/application.h"
 #include "ns3/ptr.h"
@@ -27,6 +27,11 @@
 #include "multiview-model.h"
 #include "mvdash_adaptation_algorithm.h"
 #include "mvdash.h"
+#include "module_request.h"
+#include "ns3/request_single.h"
+#include "ns3/request_group_mv.h"
+#include "ns3/request_hybrid.h"
+#include "ns3/request_group_sg.h"
 
 namespace ns3 {
 
@@ -94,32 +99,12 @@ protected:
 
 private:
   bool Req_buffering = false; //playback tracing : buffering or not
-  bool Req_Type = false; // hybrid true, group false
-  bool Req_single = false; //group request is pending or not
-  int Req_m_tIndexReqSent; //Segment index
-  int32_t Req_m_tIndexDownloaded; //Segment index
-
   int32_t indexDownload; //helper for single/group
   int32_t segment_LastBuffer;
   // inherited from Application base class.
   virtual void StartApplication (void); // Called at time specified by Start
   virtual void StopApplication (void); // Called at time specified by Stop
 
-  /**
- * @brief Hybrid Request canceling
- * 
- *  case 1: current playback is the last buffered segment, continue group request
- *  case 2: when asking segment n+2 because not enough time to download n+1 >0 quality, but n+2 is not buffered yet
- */
-  bool Req_HybridCanceling ();
-
-  /**
- * @brief Hybrid request segment selection'
- * Due to not enough time to download choosed segment, skip to n+1
- * 
- * @return int 
- */
-  int Req_HybridSegmentSelection ();
 
   /**
    * \brief Handle a packet received by the application
@@ -140,24 +125,6 @@ private:
   struct st_mvdashRequest *PrepareRequest (int tIndexDownload);
   int SendRequest (struct st_mvdashRequest *pMsg, int nReq);
 
-  /**
- * @brief 
-  * In the Request -> Response system, the most important part is m_downData.time
-  * Because single request is redownload the previous segment, we only consider the segment index
-  * and to update the quality of the downloaded segment
- * @param pMsg Mvdash request
- * @return int 
- */
-  int Hybrid_SendRequest (struct st_mvdashRequest *pMsg); //DION Test
-
-  /**
- * @brief create mvdash request for single messasge
- * 
- * @param tIndexReq Segment index
- * @return struct st_mvdashRequest* 
- */
-  struct st_mvdashRequest *Hybrid_PrepareRequest (int tIndexDownload); //DION Test
-
   bool StartPlayback (void);
 
   void Controller (controllerEvent event);
@@ -168,14 +135,8 @@ private:
 
   int ReadInBitrateValues (std::string segmentSizeFile);
 
-  /**
-   * @brief Calculate PSNR
-   * 
-   * @param segmentSizeFile 
-   * @return int 
-   */
 
-  void read_VMAF ();
+  void read_VMAF (std::string segmentVmafFile);
   void LogPlayback (void);
   void LogDownload (void);
   void LogBuffer (void);
@@ -188,6 +149,7 @@ private:
   std::string m_vpInfoFilePath;
   std::string m_vpModelName;
   std::string m_mvInfoFilePath;
+  std::string m_mvVmafFilePath;
   std::string m_mvAlgoName;
   std::string m_reqType;
 
@@ -211,6 +173,7 @@ private:
 
   MultiView_Model *m_pViewModel;
   mvdashAdaptationAlgorithm *m_pAlgorithm;
+  moduleRequest *m_pRequestModel;
 
   //std::vector <videoData> m_videoData;
   t_videoDataGroup m_videoData;
@@ -243,4 +206,4 @@ private:
 
 } // namespace ns3
 
-#endif /* MVDASH_CLIENT_H */
+#endif /* MVDASH_CLIENT */

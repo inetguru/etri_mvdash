@@ -16,12 +16,17 @@ def build(bld):
         'model/free_viewpoint_model.cc',
         'model/markovian_viewpoint_model.cc',
         'model/mvdash_adaptation_algorithm.cc',
-        'model/maximize_current_adaptation.cc',
-        'model/adaptation_test.cc', #TEST
-        'model/adaptation_tobasco.cc', #TEST
-        'model/adaptation_panda.cc', #TEST
-        'model/adaptation_mpc.cc', #TEST
-        'model/adaptation_qmetric.cc', #TEST
+        'model/abr/maximize_current_adaptation.cc',
+        'model/abr/adaptation_test.cc', #TEST
+        'model/abr/adaptation_tobasco.cc', #TEST
+        'model/abr/adaptation_panda.cc', #TEST
+        'model/abr/adaptation_mpc.cc', #TEST
+        'model/abr/adaptation_qmetric.cc', #TEST
+        'model/module_request.cc', #TEST
+        'model/request/request_single.cc', #TEST
+        'model/request/request_group_mv.cc', #TEST
+        'model/request/request_hybrid.cc', #TEST
+        'model/request/request_group_sg.cc', #TEST
         'helper/mvdash-helper.cc',
         ]
 
@@ -47,12 +52,17 @@ def build(bld):
         'model/free_viewpoint_model.h',
         'model/markovian_viewpoint_model.h',
         'model/mvdash_adaptation_algorithm.h',
-        'model/maximize_current_adaptation.h',    
-        'model/adaptation_test.h', #TEST   
-        'model/adaptation_tobasco.h', #TEST   
-        'model/adaptation_panda.h', #TEST   
-        'model/adaptation_mpc.h', #TEST
-        'model/adaptation_qmetric.h', #TEST
+        'model/abr/maximize_current_adaptation.h',    
+        'model/abr/adaptation_test.h', #TEST   
+        'model/abr/adaptation_tobasco.h', #TEST   
+        'model/abr/adaptation_panda.h', #TEST   
+        'model/abr/adaptation_mpc.h', #TEST
+        'model/abr/adaptation_qmetric.h', #TEST
+        'model/module_request.h', #TEST
+        'model/request/request_single.h', #TEST
+        'model/request/request_group_mv.h', #TEST
+        'model/request/request_hybrid.h', #TEST
+        'model/request/request_group_sg.h', #TEST
         'helper/mvdash-helper.h',
         ]
 

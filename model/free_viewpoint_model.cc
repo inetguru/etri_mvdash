@@ -26,18 +26,15 @@ NS_OBJECT_ENSURE_REGISTERED (Free_Viewpoint_Model);
 
 Free_Viewpoint_Model::Free_Viewpoint_Model ()
 {
-  /*    m_nViews = 9;
-    m_minDwellTime = 2;
 
-    m_cumulativeProb = {0.6, 0.7, 0.8, 0.85, 0.9, 0.925, 0.95, 0.975, 1.0};
-    m_avgDwellTime = {10,5,5,5,5,8,8,5,5};*/
-
+  //========Tuneable changing frequency=================
   m_nViews = 5;
-  m_minDwellTime = 300;
+  m_minDwellTime = 2; 
 
   m_cumulativeProb = {0.4, 0.6, 0.80, 0.90, 1.0};
   m_avgDwellTime = {4,2,2,3,3};
 
+  //=====================================================
 
 
   ns3::RngSeedManager::SetSeed (2);
@@ -60,9 +57,7 @@ Free_Viewpoint_Model::InitViewpoint ()
 {
   int32_t viewpoint = 0;
 
-  //    m_remDwellTime = m_minDwellTime + ceil(m_pExpRNG->GetValue(m_avgDwellTime.at(viewpoint), 30));
   m_remDwellTime = 2 * m_minDwellTime;
-  //    NS_LOG_INFO("InitViewpoint - Dwell Time : " << m_remDwellTime);
   return viewpoint;
 }
 
